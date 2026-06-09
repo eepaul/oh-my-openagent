@@ -5,6 +5,7 @@ import {
   migrateToolsToPermission,
   migrateAgentConfig,
 } from "./permission-compat"
+import { AgentPermissionSchema } from "../config/schema/internal/permission"
 
 describe("permission-compat", () => {
   describe("createAgentToolRestrictions", () => {
@@ -173,6 +174,34 @@ describe("permission-compat", () => {
 
       //#then original permission object is not mutated
       expect(originalPerm).toEqual({ delegate_task: "allow" })
+    })
+  })
+
+  describe("external_directory schema + compat round-trip (A4)", () => {
+    test("external_directory:'allow' survives schema parse + permission-compat unchanged", () => {
+      //#given a raw permission object granting external_directory access
+      const raw = { external_directory: "allow" }
+
+      //#when it is validated by the Zod permission schema, then run through the compat migration
+      const parsed = AgentPermissionSchema.parse(raw)
+      const migrated = migrateAgentConfig({ permission: parsed })
+
+      //#then external_directory remains "allow" end to end
+      expect(parsed.external_directory).toBe("allow")
+      const perm = migrated.permission as Record<string, string>
+      expect(perm["external_directory"]).toBe("allow")
+    })
+
+    test("strips unknown keys but whitelists external_directory through schema parse", () => {
+      //#given a permission object carrying external_directory alongside a bogus unknown key
+      const raw = { external_directory: "allow", __bogus_key__: "allow" }
+
+      //#when it is validated by the Zod permission schema
+      const parsed = AgentPermissionSchema.parse(raw) as Record<string, unknown>
+
+      //#then the unknown key is dropped while external_directory is preserved
+      expect("__bogus_key__" in parsed).toBe(false)
+      expect(parsed["external_directory"]).toBe("allow")
     })
   })
 })
