@@ -20,13 +20,14 @@ type ParentWakePromptDispatchInput = {
   readonly toolWaitDecision: ToolWaitDeferralDecision
   readonly getDispatchedWake: () => PendingParentWake | undefined
   readonly hasRecordedPromptAfterDispatch: (wake: PendingParentWake) => Promise<boolean>
-  readonly trackDispatchedWake: (wake: PendingParentWake, dispatchedAt: number) => void
+  readonly trackDispatchedWake: (wake: PendingParentWake, dispatchedAt: number, replyProduced: boolean) => void
   readonly requeueWake: (wake: PendingParentWake) => void
   readonly scheduleFlush: (delayMs?: number) => void
 }
 
 export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput): Promise<void> {
   const notificationContent = input.latestWake.notifications.join("\n\n")
+  const replyProduced = input.forceNoReply !== true && input.latestWake.shouldReply
   let dispatchStartedAt = Date.now()
   try {
     dispatchStartedAt = Date.now()
@@ -57,7 +58,7 @@ export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput)
         const dispatchedWake = cloneParentWake(input.latestWake)
         dispatchedWake.dispatchedAt = dispatchStartedAt
         if (await input.hasRecordedPromptAfterDispatch(dispatchedWake)) {
-          input.trackDispatchedWake(input.latestWake, dispatchStartedAt)
+          input.trackDispatchedWake(input.latestWake, dispatchStartedAt, replyProduced)
           log("[background-agent] Treated failed parent wake prompt as accepted after observing session history:", {
             sessionID: input.sessionID,
             error: promptResult.error,
@@ -93,7 +94,7 @@ export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput)
     }
     log("[background-agent] Sent deferred parent wake:", { sessionID: input.sessionID })
     delete input.latestWake.allowEmptyAssistantTurnRetry
-    input.trackDispatchedWake(input.latestWake, dispatchStartedAt)
+    input.trackDispatchedWake(input.latestWake, dispatchStartedAt, replyProduced)
   } catch (error) {
     const errorText = error instanceof Error ? `${error.name}: ${error.message}` : getErrorText(error) || String(error)
     input.requeueWake(input.latestWake)

@@ -24,20 +24,12 @@ function idleAssistantMessage(): SessionMessageStub {
   return { info: { role: "assistant", finish: "stop", time: { created: Date.now() - 10_000 } } }
 }
 
-function userMessageInProgress(): SessionMessageStub {
-  return {
-    info: { role: "user", time: { created: Date.now() } },
-    parts: [{ type: "text", text: "what is the status?" }],
-  }
-}
-
 function createNotifier(): {
   readonly notifier: ParentWakeNotifier
   readonly promptAsyncCalls: PromptAsyncCall[]
-  readonly setSessionMessages: (messages: SessionMessageStub[]) => void
 } {
   const promptAsyncCalls: PromptAsyncCall[] = []
-  let sessionMessages: SessionMessageStub[] = [idleAssistantMessage()]
+  const sessionMessages: SessionMessageStub[] = [idleAssistantMessage()]
   const client: ParentWakeNotifierClientForTest = {
     session: {
       messages: async () => ({ data: sessionMessages }),
@@ -63,15 +55,13 @@ function createNotifier(): {
       toolCallDeferMaxMs: 5_000,
       failureRequeueWindowMs: 5_000,
       userMessageInProgressWindowMs: 60_000,
+      parentSessionActivityInProgressWindowMs: 60_000,
     },
   )
 
   return {
     notifier,
     promptAsyncCalls,
-    setSessionMessages: (messages) => {
-      sessionMessages = messages
-    },
   }
 }
 
@@ -94,6 +84,7 @@ describe("ParentWakeNotifier — admit-only wake must not suppress a later reply
       expect(promptAsyncCalls).toHaveLength(1)
       expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
       expect(notifier.getDispatchedParentWakes().get(sessionID)?.shouldReply).toBe(false)
+      expect(notifier.getDispatchedParentWakes().get(sessionID)?.replyProduced).toBe(false)
       releaseParentWakeHold(sessionID)
 
       // when
@@ -110,30 +101,30 @@ describe("ParentWakeNotifier — admit-only wake must not suppress a later reply
     }
   })
 
-  test("#given an all-complete reply wake was admitted with noReply because the parent was busy #when the same all-complete reply wake fires again after the parent idles #then the redundancy gate must not suppress the reply-bearing dispatch", async () => {
+  test("#given an all-complete reply wake was admitted with noReply because parent activity was fresh #when the same all-complete reply wake fires again after the parent idles #then the redundancy gate must not suppress the reply-bearing dispatch", async () => {
     // given
-    const { notifier, promptAsyncCalls, setSessionMessages } = createNotifier()
+    const { notifier, promptAsyncCalls } = createNotifier()
     const sessionID = "parent-final-admit-only-poisons-reply"
-    setSessionMessages([userMessageInProgress()])
+    notifier.recordParentSessionActivity(sessionID)
     notifier.queuePendingParentWake(sessionID, ALL_COMPLETE_WAKE, { agent: "sisyphus" }, true)
 
     try {
       await notifier.flushPendingParentWake(sessionID)
-      // The busy parent forces an admit-only (noReply) dispatch even though the
-      // wake carries reply intent, and the dispatched tracker keeps shouldReply=true.
       expect(promptAsyncCalls).toHaveLength(1)
       expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
       expect(notifier.getDispatchedParentWakes().get(sessionID)?.shouldReply).toBe(true)
+      expect(notifier.getDispatchedParentWakes().get(sessionID)?.replyProduced).toBe(false)
       releaseParentWakeHold(sessionID)
 
       // when
-      setSessionMessages([idleAssistantMessage()])
+      notifier.recordParentSessionIdle(sessionID)
       notifier.queuePendingParentWake(sessionID, ALL_COMPLETE_WAKE, { agent: "sisyphus" }, true)
       await notifier.flushPendingParentWake(sessionID)
 
       // then
       expect(promptAsyncCalls).toHaveLength(2)
       expect(promptAsyncCalls[1]?.body.noReply).toBe(false)
+      expect(notifier.getDispatchedParentWakes().get(sessionID)?.replyProduced).toBe(true)
       expect(notifier.getPendingParentWakes().has(sessionID)).toBe(false)
     } finally {
       notifier.shutdown()

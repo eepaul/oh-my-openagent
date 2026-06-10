@@ -11,6 +11,7 @@ export type PendingParentWake = {
   promptContext: ParentWakePromptContext
   notifications: string[]
   shouldReply: boolean
+  replyProduced?: boolean
   dispatchedAt?: number
   toolCallDeferralStartedAt?: number
   allowEmptyAssistantTurnRetry?: boolean
@@ -32,6 +33,7 @@ export function cloneParentWake(wake: PendingParentWake): PendingParentWake {
     promptContext,
     notifications: [...wake.notifications],
     shouldReply: wake.shouldReply,
+    ...(wake.replyProduced !== undefined ? { replyProduced: wake.replyProduced } : {}),
     ...(wake.dispatchedAt !== undefined ? { dispatchedAt: wake.dispatchedAt } : {}),
     ...(wake.toolCallDeferralStartedAt !== undefined
       ? { toolCallDeferralStartedAt: wake.toolCallDeferralStartedAt }
@@ -78,7 +80,7 @@ function parentWakePromptContextMatches(left: PendingParentWake, right: PendingP
 }
 
 function parentWakeReplyModeIsCovered(latestWake: PendingParentWake, dispatchedWake: PendingParentWake): boolean {
-  return !latestWake.shouldReply || dispatchedWake.shouldReply
+  return !latestWake.shouldReply || dispatchedWake.replyProduced === true
 }
 
 function parentWakeNotificationsAreCovered(latestWake: PendingParentWake, dispatchedWake: PendingParentWake): boolean {

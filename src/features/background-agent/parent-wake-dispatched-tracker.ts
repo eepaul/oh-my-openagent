@@ -37,10 +37,11 @@ export class ParentWakeDispatchedTracker {
     this.dispatchedParentWakes.delete(sessionID)
   }
 
-  trackWake(sessionID: string, wake: PendingParentWake, dispatchedAt: number): void {
+  trackWake(sessionID: string, wake: PendingParentWake, dispatchedAt: number, replyProduced: boolean): void {
     this.clearWake(sessionID)
     const dispatchedWake = cloneParentWake(wake)
     dispatchedWake.dispatchedAt = dispatchedAt
+    dispatchedWake.replyProduced = replyProduced
     this.dispatchedParentWakes.set(sessionID, dispatchedWake)
     this.scheduleFailureWindowTimer(sessionID)
   }
