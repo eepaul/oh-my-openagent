@@ -24,6 +24,7 @@ import {
   clearDelegatedChildSessionBootstrap,
   registerDelegatedChildSessionBootstrap,
 } from "../../shared/delegated-child-session-bootstrap"
+import { inheritApprovals } from "../../shared/external-directory-approvals"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
 import {
   hasMoreFallbacks,
@@ -71,7 +72,6 @@ import {
 } from "./error-classifier"
 import { isEmptyNoProgressAssistantTurnInfo } from "./empty-assistant-turn"
 import { tryFallbackRetry } from "./fallback-retry-handler"
-import { messageUpdatedInfoHasParentWakeOutput } from "./message-updated-parent-wake-output"
 import {
   type CircuitBreakerSettings,
   detectRepetitiveToolUse,
@@ -769,6 +769,7 @@ export class BackgroundManager {
     }
 
     const sessionID = createResult.data.id
+    inheritApprovals(input.approvalSourceSessionId ?? input.parentSessionId, sessionID)
 
     if (task.status === "cancelled") {
       clearDelegatedChildSessionBootstrap(sessionID)
@@ -1583,7 +1584,7 @@ The fallback retry session is now created and can be inspected directly.
       }
       this.parentWakeNotifier.recordParentSessionActivity(sessionID)
 
-      if (messageUpdatedInfoHasParentWakeOutput(info, role)) {
+      if (this.messageUpdatedInfoHasParentWakeOutput(info, role)) {
         this.clearDispatchedParentWake(sessionID)
       }
 

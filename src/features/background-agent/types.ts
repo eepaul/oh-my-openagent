@@ -120,6 +120,8 @@ export interface LaunchInput {
   skillContent?: string
   category?: string
   sessionPermission?: SessionPermissionRule[]
+  /** Session whose external-directory approval memo should seed this child. Defaults to parentSessionId. */
+  approvalSourceSessionId?: string
   onSessionCreated?: (sessionId: string) => void | Promise<void>
 }
 

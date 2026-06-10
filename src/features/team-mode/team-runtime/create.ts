@@ -2,6 +2,7 @@ import { access, mkdir } from "node:fs/promises"
 import path from "node:path"
 
 import type { TeamModeConfig } from "../../../config/schema/team-mode"
+import { inheritApprovals } from "../../../shared/external-directory-approvals"
 import { QUESTION_DENIED_SESSION_PERMISSION } from "../../../shared/question-denied-session-permission"
 import type { ExecutorContext } from "../../../tools/delegate-task/executor-types"
 import type { BackgroundTask } from "../../background-agent/types"
@@ -209,6 +210,7 @@ export async function createTeamRun(
             category: member.kind === "category" ? member.category : undefined,
             sessionPermission: QUESTION_DENIED_SESSION_PERMISSION,
             onSessionCreated: async (sessionId) => {
+              inheritApprovals(leadSessionId, sessionId)
               registerTeamSession(sessionId, {
                 teamRunId: runtimeState.teamRunId,
                 memberName: member.name,
@@ -224,6 +226,7 @@ export async function createTeamRun(
           })
           resource.taskId = task.id
           const sessionId = await waitForTaskSessionId(bgMgr, task, deadlineAt)
+          inheritApprovals(leadSessionId, sessionId)
           registerTeamSession(sessionId, {
             teamRunId: runtimeState.teamRunId,
             memberName: member.name,

@@ -55,6 +55,30 @@ describe("buildPlanDemoteConfig", () => {
     expect(result.name).toBeUndefined()
   })
 
+  test("preserves only external_directory permission during plan demotion", () => {
+    //#given
+    const prometheusConfig = {
+      model: "anthropic/claude-opus-4-7",
+      permission: {
+        external_directory: "allow",
+        edit: "deny",
+        bash: "allow",
+        task: "deny",
+      },
+    }
+
+    //#when
+    const result = buildPlanDemoteConfig(prometheusConfig, undefined)
+    const permission = result.permission as Record<string, unknown> | undefined
+
+    //#then
+    expect(permission).toEqual({ external_directory: "allow" })
+    expect(Object.keys(permission ?? {})).toEqual(["external_directory"])
+    expect(permission?.edit).toBeUndefined()
+    expect(permission?.bash).toBeUndefined()
+    expect(permission?.task).toBeUndefined()
+  })
+
   test("plan override takes priority over prometheus for all model settings", () => {
     //#given
     const prometheusConfig = {

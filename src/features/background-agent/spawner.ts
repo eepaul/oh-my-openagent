@@ -1,5 +1,6 @@
 import { log, promptWithRetryInDirectory } from "../../shared"
 import { stripAgentListSortPrefix } from "../../shared/agent-display-names"
+import { inheritApprovals } from "../../shared/external-directory-approvals"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { setSessionTools } from "../../shared/session-tools-store"
 import { isInsideTmux } from "../../shared/tmux"
@@ -73,6 +74,7 @@ export async function startTask(
   }
 
   const sessionID = createResult.data.id
+  inheritApprovals(input.approvalSourceSessionId ?? input.parentSessionId, sessionID)
   const normalizedAgent = stripAgentListSortPrefix(input.agent)
   await input.onSessionCreated?.(sessionID)
   subagentSessions.add(sessionID)

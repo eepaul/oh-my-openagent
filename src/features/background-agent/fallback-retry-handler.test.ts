@@ -3,6 +3,7 @@ import { tryFallbackRetry, TeamModeFallbackError, type FallbackRetryHandlerDeps 
 import type { FallbackEntry } from "../../shared/model-requirements"
 import type { ProviderModelsCache } from "../../shared/connected-providers-cache"
 import { QUESTION_DENIED_SESSION_PERMISSION } from "../../shared/question-denied-session-permission"
+import { clearAllApprovals, hasApproval, inheritApprovals, recordApproval } from "../../shared/external-directory-approvals"
 
 const sharedLogMock = mock(() => {})
 const readConnectedProvidersCacheMock = mock(() => null)
@@ -115,6 +116,7 @@ describe("tryFallbackRetry", () => {
   })
 
   beforeEach(() => {
+    clearAllApprovals()
     shouldRetryErrorMock.mockImplementation(() => true)
     selectFallbackProviderMock.mockImplementation((providers: string[]) => providers[0])
     readProviderModelsCacheMock.mockReturnValue(null)
@@ -297,6 +299,23 @@ describe("tryFallbackRetry", () => {
       const retryInput = args.queuesByKey.get(key)?.[0]?.input
       expect(retryInput?.skillContent).toBe("delegated skill system")
       expect(retryInput?.sessionPermission).toEqual(QUESTION_DENIED_SESSION_PERMISSION)
+    })
+
+    test("carries previous child-session approvals into retry input by default", async () => {
+      const approvedDir = "/retry/approved/external"
+      const otherDir = "/retry/other/external"
+      const args = createDefaultArgs({ sessionId: "ses_failed_child" })
+      recordApproval("ses_failed_child", approvedDir)
+
+      await tryFallbackRetry(args)
+
+      const key = `${args.task.model!.providerID}/${args.task.model!.modelID}`
+      const retryInput = args.queuesByKey.get(key)?.[0]?.input
+      expect(retryInput?.approvalSourceSessionId).toBe("ses_failed_child")
+
+      inheritApprovals(retryInput?.approvalSourceSessionId ?? "", "ses_retry_child")
+      expect(hasApproval("ses_retry_child", approvedDir)).toBe(true)
+      expect(hasApproval("ses_retry_child", otherDir)).toBe(false)
     })
 
     test("finalizes the failed attempt, creates a new pending attempt, and enqueues its explicit attemptID", async () => {
