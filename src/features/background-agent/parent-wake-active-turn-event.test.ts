@@ -97,6 +97,22 @@ function getPendingParentWakes(manager: BackgroundManager): Map<string, PendingP
   return parentWakeNotifier.getPendingParentWakes()
 }
 
+function queuePendingParentWakeForTest(
+  manager: BackgroundManager,
+  sessionID: string,
+  notification: string,
+  shouldReply: boolean,
+): void {
+  const queuePendingParentWake = Reflect.get(manager, "queuePendingParentWake") as (
+    sessionID: string,
+    notification: string,
+    promptContext: Record<string, unknown>,
+    shouldReply: boolean,
+    delayMs?: number,
+  ) => void
+  queuePendingParentWake.call(manager, sessionID, notification, { agent: "sisyphus" }, shouldReply, 0)
+}
+
 async function notifyParentSessionForTest(manager: BackgroundManager, task: BackgroundTask): Promise<void> {
   const notifyParentSession = Reflect.get(manager, "notifyParentSession") as (task: BackgroundTask) => Promise<void>
   return notifyParentSession.call(manager, task)
@@ -236,7 +252,7 @@ describe("BackgroundManager parent wake active turn events", () => {
     expect(getPendingParentWakes(manager).has("parent-1")).toBe(false)
   })
 
-  test("#when parent idle event follows fresh reasoning delta #then background completion still records an admit-only wake", async () => {
+  test("#when parent idle event follows fresh reasoning delta #then the completed turn can receive a reply wake", async () => {
     // given
     const sessionStatuses: Record<string, { type: string }> = {
       "parent-1": { type: "idle" },
@@ -268,7 +284,46 @@ describe("BackgroundManager parent wake active turn events", () => {
 
     // then
     expect(promptAsyncCalls).toHaveLength(1)
-    expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
+    expect(promptAsyncCalls[0]?.body.noReply).toBe(false)
     expect(getPendingParentWakes(manager).has("parent-1")).toBe(false)
+  })
+
+
+  test("#when message.updated carries only an internal parent wake user message #then it does not refresh activity and strand the final reply wake", async () => {
+    // given
+    const sessionStatuses: Record<string, { type: string }> = {
+      "parent-internal-message-updated": { type: "idle" },
+    }
+    const { manager, promptAsyncCalls } = createManager(sessionStatuses)
+    managerUnderTest = manager
+    manager.handleEvent({
+      type: "message.updated",
+      properties: {
+        sessionID: "parent-internal-message-updated",
+        info: {
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "<system-reminder>\n[BACKGROUND TASK RESULT READY]\n</system-reminder>\n<!-- OMO_INTERNAL_INITIATOR -->",
+            },
+          ],
+        },
+      },
+    })
+
+    // when
+    queuePendingParentWakeForTest(
+      manager,
+      "parent-internal-message-updated",
+      "<system-reminder>\n[BACKGROUND TASK COMPLETED]\n[ALL BACKGROUND TASKS COMPLETE]\n</system-reminder>",
+      true,
+    )
+    await flushPendingParentWakeForTest(manager, "parent-internal-message-updated")
+
+    // then
+    expect(promptAsyncCalls).toHaveLength(1)
+    expect(promptAsyncCalls[0]?.body.noReply).toBe(false)
+    expect(getPendingParentWakes(manager).has("parent-internal-message-updated")).toBe(false)
   })
 })

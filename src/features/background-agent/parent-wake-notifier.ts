@@ -85,9 +85,7 @@ export class ParentWakeNotifier {
   }
 
   recordParentSessionIdle(sessionID: string): void {
-    if (!this.pendingQueue.hasWake(sessionID)) {
-      this.sessionInspector.clearRecentActivity(sessionID)
-    }
+    this.sessionInspector.clearRecentActivity(sessionID)
   }
 
   queuePendingParentWake(

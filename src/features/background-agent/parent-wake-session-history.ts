@@ -62,6 +62,7 @@ export type ParentWakeSessionMessage = {
 export type ToolWaitDeferralDecision = {
   readonly defer: boolean
   readonly skipPromptGateToolStateCheck: boolean
+  readonly inspectedMessageCount?: number
 }
 
 export function parentWakeUserMessageIsInProgress(input: {
@@ -110,27 +111,32 @@ export function getParentWakeSessionHistoryDeferralDecision(input: {
     log("[background-agent] Deferred parent wake because parent messages could not be inspected:", {
       sessionID: input.sessionID,
     })
-    return { defer: true, skipPromptGateToolStateCheck: false }
+    return { defer: true, skipPromptGateToolStateCheck: false, inspectedMessageCount: undefined }
   }
-  const messages = [...input.messages]
+  const messages = withoutTrailingBackgroundWakeInternalUserMessages(input.messages)
+  const skippedTrailingBackgroundWake = messages.length !== input.messages.length
   const latestAssistantBlocksPrompt = latestAssistantTurnBlocksInternalPrompt(messages)
   const latestAssistantHasUnansweredQuestion = latestAssistantTurnHasUnansweredQuestion(messages)
   if (!latestAssistantBlocksPrompt) {
     delete input.wake.toolCallDeferralStartedAt
     delete input.wake.allowEmptyAssistantTurnRetry
-    return { defer: false, skipPromptGateToolStateCheck: false }
+    return {
+      defer: false,
+      skipPromptGateToolStateCheck: skippedTrailingBackgroundWake,
+      inspectedMessageCount: input.messages.length,
+    }
   }
   const now = input.now ?? Date.now()
   input.wake.toolCallDeferralStartedAt ??= now
   if (input.wake.allowEmptyAssistantTurnRetry && latestAssistantTurnIsCompletedEmptyNoProgress(messages)) {
     log("[background-agent] Retrying parent wake after completed empty assistant turn:", { sessionID: input.sessionID })
-    return { defer: false, skipPromptGateToolStateCheck: true }
+    return { defer: false, skipPromptGateToolStateCheck: true, inspectedMessageCount: input.messages.length }
   }
   if (latestAssistantHasUnansweredQuestion) {
     log("[background-agent] Deferred parent wake because latest assistant question awaits user response:", {
       sessionID: input.sessionID,
     })
-    return { defer: true, skipPromptGateToolStateCheck: false }
+    return { defer: true, skipPromptGateToolStateCheck: false, inspectedMessageCount: input.messages.length }
   }
   if (
     now - input.wake.toolCallDeferralStartedAt >= input.toolCallDeferMaxMs
@@ -139,12 +145,12 @@ export function getParentWakeSessionHistoryDeferralDecision(input: {
   ) {
     delete input.wake.toolCallDeferralStartedAt
     log("[background-agent] Retrying parent wake after stale tool-call deferral:", { sessionID: input.sessionID })
-    return { defer: false, skipPromptGateToolStateCheck: true }
+    return { defer: false, skipPromptGateToolStateCheck: true, inspectedMessageCount: input.messages.length }
   }
   log("[background-agent] Deferred parent wake because latest assistant turn blocks internal prompts:", {
     sessionID: input.sessionID,
   })
-  return { defer: true, skipPromptGateToolStateCheck: false }
+  return { defer: true, skipPromptGateToolStateCheck: false, inspectedMessageCount: input.messages.length }
 }
 
 export function hasRecordedParentWakePromptMessage(input: {
@@ -189,6 +195,36 @@ export function hasAssistantOrToolOutputAfterParentWake(input: {
 
 function getParentWakeMessageRole(message: ParentWakeSessionMessage): string | undefined {
   return message.info?.role ?? message.role
+}
+
+function messageTextIncludesBackgroundWakeHeader(message: ParentWakeSessionMessage): boolean {
+  return message.parts?.some((part) => {
+    if (typeof part.text !== "string") {
+      return false
+    }
+    return part.text.includes("[BACKGROUND TASK RESULT READY]")
+      || part.text.includes("[BACKGROUND TASK RETRY SESSION READY]")
+      || part.text.includes("[BACKGROUND TASK COMPLETED]")
+      || part.text.includes("[ALL BACKGROUND TASKS COMPLETE]")
+  }) ?? false
+}
+
+function backgroundWakeInternalUserMessageIsTransparent(message: ParentWakeSessionMessage): boolean {
+  return isSyntheticOrInternalUserMessage(message) && messageTextIncludesBackgroundWakeHeader(message)
+}
+
+function withoutTrailingBackgroundWakeInternalUserMessages(
+  messages: readonly ParentWakeSessionMessage[],
+): ParentWakeSessionMessage[] {
+  const trimmed = [...messages]
+  while (trimmed.length > 0) {
+    const latest = trimmed[trimmed.length - 1]
+    if (!latest || !backgroundWakeInternalUserMessageIsTransparent(latest)) {
+      break
+    }
+    trimmed.pop()
+  }
+  return trimmed
 }
 
 function parentWakeMessageHasOutput(message: ParentWakeSessionMessage): boolean {

@@ -51,9 +51,23 @@ export class ParentWakeFlushRunner {
     }
 
     if (this.hasRecentParentSessionActivity(sessionID)) {
+      const recentActivityDecision = latestWake.shouldReply
+        ? await this.shouldDeferParentWakeForSessionHistory(sessionID, latestWake)
+        : undefined
+      if (
+        recentActivityDecision
+        && !recentActivityDecision.defer
+        && (recentActivityDecision.inspectedMessageCount ?? 0) > 0
+      ) {
+        await this.sendParentWakePrompt(sessionID, latestWake, {
+          emptyAssistantTurnRetry: latestWake.allowEmptyAssistantTurnRetry === true,
+          toolWaitDecision: recentActivityDecision,
+        })
+        return
+      }
       await this.sendParentWakePrompt(sessionID, latestWake, {
         emptyAssistantTurnRetry: false,
-        toolWaitDecision: { defer: false, skipPromptGateToolStateCheck: true },
+        toolWaitDecision: recentActivityDecision ?? { defer: false, skipPromptGateToolStateCheck: true },
         forceNoReply: true,
       })
       log("[background-agent] Recorded admit-only parent wake because parent session activity is still fresh:", {

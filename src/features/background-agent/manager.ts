@@ -1489,6 +1489,24 @@ The fallback retry session is now created and can be inspected directly.
     this.observedIncompleteTodosBySession.delete(sessionID)
   }
 
+  private messageUpdatedInfoIsInternalWake(info: Record<string, unknown>, role: unknown): boolean {
+    if (role !== "user" || !Array.isArray(info.parts)) {
+      return false
+    }
+
+    let textPartCount = 0
+    for (const part of info.parts) {
+      if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") {
+        continue
+      }
+      textPartCount += 1
+      if (part.synthetic !== true && !hasInternalInitiatorMarker(part.text)) {
+        return false
+      }
+    }
+    return textPartCount > 0
+  }
+
   private messageUpdatedInfoHasParentWakeOutput(info: Record<string, unknown>, role: unknown): boolean {
     if (role === "tool") {
       return true
@@ -1574,6 +1592,7 @@ The fallback retry session is now created and can be inspected directly.
 
       const sessionID = resolveMessageEventSessionID(props)
       const role = info.role
+      const isInternalWakeMessage = this.messageUpdatedInfoIsInternalWake(info, role)
       if (!sessionID) return
       if (isEmptyNoProgressAssistantTurnInfo(info)) {
         const dispatchedWake = this.parentWakeNotifier.getDispatchedParentWakes().get(sessionID)
@@ -1582,7 +1601,9 @@ The fallback retry session is now created and can be inspected directly.
           return
         }
       }
-      this.parentWakeNotifier.recordParentSessionActivity(sessionID)
+      if (!isInternalWakeMessage) {
+        this.parentWakeNotifier.recordParentSessionActivity(sessionID)
+      }
 
       if (this.messageUpdatedInfoHasParentWakeOutput(info, role)) {
         this.clearDispatchedParentWake(sessionID)
