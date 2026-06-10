@@ -7,6 +7,11 @@ import { createChatMessageHandler } from "./chat-message"
 import * as openclawRuntimeDispatch from "../openclaw/runtime-dispatch"
 import { _resetForTesting, setMainSession, subagentSessions } from "../features/claude-code-session-state"
 import { clearPendingModelFallback, createModelFallbackHook } from "../hooks/model-fallback/hook"
+import {
+	clearAllApprovals,
+	hasApproval,
+	recordApproval,
+} from "../shared/external-directory-approvals"
 import { getSessionPromptParams, setSessionPromptParams } from "../shared/session-prompt-params-state"
 
 type EventInput = { event: { type: string; properties?: unknown } }
@@ -146,6 +151,7 @@ async function flushMicrotasks(turns: number = 5): Promise<void> {
 afterEach(() => {
 	mock.restore()
 	_resetForTesting()
+	clearAllApprovals()
 })
 
 describe("event error extraction", () => {
@@ -1578,6 +1584,43 @@ describe("createEventHandler - event forwarding", () => {
 		}))
 		expect(getSessionPromptParams(sessionID)).toBeUndefined()
 	})
+
+	it("clears external-directory approvals on session.deleted", async () => {
+		//#given
+		const eventHandler = createEventHandler({
+			ctx: {} as never,
+			pluginConfig: {} as never,
+			firstMessageVariantGate: {
+				markSessionCreated: () => {},
+				clear: () => {},
+			},
+			managers: {
+				skillMcpManager: {
+					disconnectSession: async () => {},
+				},
+				tmuxSessionManager: {
+					onSessionCreated: async () => {},
+					onSessionDeleted: async () => {},
+				},
+			} as never,
+			hooks: {} as never,
+		})
+		const sessionID = "ses_external_approval_deleted"
+		const externalDirectory = "/tmp/omo-external-delete"
+		recordApproval(sessionID, externalDirectory)
+		expect(hasApproval(sessionID, externalDirectory)).toBe(true)
+
+		//#when
+		await eventHandler(asEventHandlerInput({
+			event: {
+				type: "session.deleted",
+				properties: { info: { id: sessionID } },
+			},
+		}))
+
+		//#then
+		expect(hasApproval(sessionID, externalDirectory)).toBe(false)
+	})
 })
 
 describe("createEventHandler - retry dedupe lifecycle", () => {
@@ -1867,7 +1910,7 @@ describe("createEventHandler - session recovery compaction", () => {
 				stopContinuationGuard: { isStopped: () => false },
 			}),
 		})
-		await expect(eventHandler(asEventHandlerInput({
+		await eventHandler(asEventHandlerInput({
 				event: {
 					type: "session.error",
 					properties: {
@@ -1875,7 +1918,7 @@ describe("createEventHandler - session recovery compaction", () => {
 						error: { name: "Error", message: "retry me" },
 					},
 				},
-			}))).resolves.toBeUndefined()
+			}))
 		expect(runtimeFallbackCalls).toHaveLength(1)
 		expect(runtimeFallbackCalls[0]?.event.type).toBe("session.error")
 	})

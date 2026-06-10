@@ -3,9 +3,14 @@ import {
   clearSessionPromptParams,
   getSessionPromptParams,
 } from "../../shared/session-prompt-params-state"
+import { clearAllApprovals, hasApproval, recordApproval } from "../../shared/external-directory-approvals"
 import { releaseAllPromptAsyncReservationsForTesting } from "../../shared/prompt-async-gate"
 import { buildFallbackBody, createTask, isAgentNotFoundError, startTask } from "./spawner"
 import type { BackgroundTask } from "./types"
+
+afterEach(() => {
+  clearAllApprovals()
+})
 
 /**
  * Poll until `fn()` returns true or timeout elapses.
@@ -775,6 +780,52 @@ describe("background-agent spawner fallback model promotion", () => {
     const dispatchedAgent = promptCalls[0]?.body?.agent
     expect(dispatchedAgent).toBe("Hephaestus - Deep Agent")
     expect(getSessionAgent(sessionID)).toBe(dispatchedAgent)
+  })
+})
+
+describe("background-agent spawner external directory approval inheritance", () => {
+  test("inherits parent-approved directories without approving a second directory", async () => {
+    //#given
+    const approvedDir = "/approved/external"
+    const unapprovedDir = "/unapproved/external"
+    recordApproval("ses_parent", approvedDir)
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/tmp/test" } }),
+        create: async () => ({ data: { id: "ses_child" } }),
+        promptAsync: async () => ({ data: {} }),
+      },
+    } as never
+    const task = createTask({
+      description: "Test task",
+      prompt: "Do work",
+      agent: "explore",
+      parentSessionId: "ses_parent",
+      parentMessageId: "msg_parent",
+    })
+    const item = {
+      task,
+      input: {
+        description: task.description,
+        prompt: task.prompt,
+        agent: task.agent,
+        parentSessionId: task.parentSessionId,
+        parentMessageId: task.parentMessageId,
+      },
+    }
+
+    //#when
+    await startTask(item as never, {
+      client,
+      directory: "/tmp/test",
+      concurrencyManager: { release: () => {} },
+      tmuxEnabled: false,
+      onTaskError: () => {},
+    } as never)
+
+    //#then
+    expect(hasApproval("ses_child", approvedDir)).toBe(true)
+    expect(hasApproval("ses_child", unapprovedDir)).toBe(false)
   })
 })
 

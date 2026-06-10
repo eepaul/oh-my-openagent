@@ -1,5 +1,6 @@
 import type { OpencodeClient } from "./types"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
+import { inheritApprovals } from "../../shared/external-directory-approvals"
 import { QUESTION_DENIED_SESSION_PERMISSION } from "../../shared/question-denied-session-permission"
 
 export async function createSyncSession(
@@ -41,5 +42,8 @@ export async function createSyncSession(
     return { ok: false, error: `Failed to create session: ${createResult.error}` }
   }
 
-  return { ok: true, sessionID: createResult.data.id, parentDirectory }
+  const sessionID = createResult.data.id
+  inheritApprovals(input.parentSessionID, sessionID)
+
+  return { ok: true, sessionID, parentDirectory }
 }

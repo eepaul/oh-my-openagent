@@ -218,6 +218,7 @@ export async function tryFallbackRetry(args: {
     fallbackChain: task.fallbackChain,
     skillContent: task.skillContent,
     sessionPermission: task.sessionPermission,
+    approvalSourceSessionId: previousSessionID,
     category: task.category,
     isUnstableAgent: task.isUnstableAgent,
     onSessionCreated: task.onSessionCreated,

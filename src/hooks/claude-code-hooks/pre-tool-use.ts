@@ -5,9 +5,11 @@ import type {
   ClaudeHooksConfig,
 } from "./types"
 import { findMatchingHooks, objectToSnakeCase, transformToolName, log } from "../../shared"
+import { hasApproval } from "../../shared/external-directory-approvals"
 import { dispatchHook, getHookIdentifier } from "./dispatch-hook"
 import { isHookCommandDisabled, type PluginExtendedConfig } from "./config-loader"
 import { normalizeHookText } from "./hook-text"
+import { dirname, isAbsolute, resolve } from "path"
 
 export interface PreToolUseContext {
   sessionId: string
@@ -17,6 +19,7 @@ export interface PreToolUseContext {
   transcriptPath?: string
   toolUseId?: string
   permissionMode?: "default" | "plan" | "acceptEdits" | "bypassPermissions"
+  internalInitiator?: boolean
 }
 
 export interface PreToolUseResult {
@@ -44,6 +47,37 @@ function buildInputLines(toolInput: Record<string, unknown>): string {
     .join("\n")
 }
 
+function normalizeCandidatePath(rawPath: string, cwd: string): string {
+  const trimmedPath = rawPath.trim().replace(/^["'`]+|["'`.,;:)\]]+$/g, "")
+  return isAbsolute(trimmedPath) ? trimmedPath : resolve(cwd, trimmedPath)
+}
+
+function extractDirectoryFromToolInput(toolInput: Record<string, unknown>, cwd: string): string | undefined {
+  const rawPath = typeof toolInput.file_path === "string"
+    ? toolInput.file_path
+    : typeof toolInput.path === "string"
+      ? toolInput.path
+      : undefined
+  if (!rawPath) {
+    return undefined
+  }
+
+  return dirname(normalizeCandidatePath(rawPath, cwd))
+}
+
+function maybeSuppressApprovedExternalDirectoryAsk(ctx: PreToolUseContext): PreToolUseResult | undefined {
+  const inputDirectory = extractDirectoryFromToolInput(ctx.toolInput, ctx.cwd)
+  if (!inputDirectory || !hasApproval(ctx.sessionId, inputDirectory)) {
+    return undefined
+  }
+
+  return { decision: "allow" }
+}
+
+function isExternalDirectoryApprovalHook(hookName: string): boolean {
+  return hookName.toLowerCase().includes("external-directory")
+}
+
 export async function executePreToolUseHooks(
   ctx: PreToolUseContext,
   config: ClaudeHooksConfig | null,
@@ -57,6 +91,21 @@ export async function executePreToolUseHooks(
   const matchers = findMatchingHooks(config, "PreToolUse", transformedToolName)
   if (matchers.length === 0) {
     return { decision: "allow" }
+  }
+
+  const executableHookNames = matchers.flatMap((matcher) => (
+    matcher.hooks
+      ?.filter((hook) => hook.type === "command" || hook.type === "http")
+      .map(getHookIdentifier) ?? []
+  ))
+  if (
+    executableHookNames.length > 0
+    && executableHookNames.every(isExternalDirectoryApprovalHook)
+  ) {
+    const approvedExternalDirectoryResult = maybeSuppressApprovedExternalDirectoryAsk(ctx)
+    if (approvedExternalDirectoryResult) {
+      return approvedExternalDirectoryResult
+    }
   }
 
   const stdinData: PreToolUseInput = {
@@ -111,9 +160,10 @@ export async function executePreToolUseHooks(
       }
 
       if (result.exitCode === 1) {
+        const reason = normalizeHookText(result.stderr) ?? normalizeHookText(result.stdout)
         return {
           decision: "ask",
-          reason: normalizeHookText(result.stderr) ?? normalizeHookText(result.stdout),
+          reason,
           modifiedInput: accumulatedModifiedInput,
           elapsedMs: Date.now() - startTime,
           hookName: firstHookName,

@@ -8,6 +8,7 @@ import path from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
 
 import { TeamModeConfigSchema } from "../../../config/schema/team-mode"
+import { clearAllApprovals, hasApproval, recordApproval } from "../../../shared/external-directory-approvals"
 import type { ExecutorContext } from "../../../tools/delegate-task/executor-types"
 import type { BackgroundTask, LaunchInput } from "../../background-agent/types"
 import { BackgroundManager } from "../../background-agent/manager"
@@ -95,11 +96,13 @@ describe("createTeamRun", () => {
 
   beforeEach(() => {
     resolveMemberMock.mockClear()
+    clearAllApprovals()
     clearTeamSessionRegistry()
     clearSessionTeamRunCleanupRegistry()
   })
 
   afterEach(() => {
+    clearAllApprovals()
     clearSessionTeamRunCleanupRegistry()
   })
 
@@ -180,6 +183,49 @@ describe("createTeamRun", () => {
       memberName: "member-1",
       role: "lead",
     })
+  })
+
+  test("#given a parent-approved external directory #when a team member session is created #then the member inherits only that approval", async () => {
+    // given
+    const baseDir = await mkdtemp(path.join(tmpdir(), "team-runtime-approval-inherit-"))
+    const externalDir = await mkdtemp(path.join(tmpdir(), "team-runtime-approved-external-"))
+    const unapprovedDir = await mkdtemp(path.join(tmpdir(), "team-runtime-unapproved-external-"))
+    temporaryDirectories.push(baseDir, externalDir, unapprovedDir)
+    recordApproval("lead-session", externalDir)
+    const tasks = new Map<string, BackgroundTask>()
+    const { manager } = createManager(
+      baseDir,
+      async (input) => {
+        const task = {
+          id: "task-approval",
+          status: "pending",
+          parentSessionId: input.parentSessionId,
+          parentMessageId: input.parentMessageId,
+          description: input.description,
+          prompt: input.prompt,
+          agent: input.agent,
+        } satisfies BackgroundTask
+        tasks.set(task.id, task)
+
+        // when
+        input.onSessionCreated?.("member-session")
+
+        // then
+        expect(hasApproval("member-session", externalDir)).toBe(true)
+        expect(hasApproval("member-session", unapprovedDir)).toBe(false)
+        tasks.set(task.id, { ...task, sessionId: "member-session", status: "running" })
+        return task
+      },
+      (taskId) => tasks.get(taskId),
+    )
+
+    // when
+    const runtimeState = await createTeamRun(createSpec(1), "lead-session", createContext(baseDir, manager), createConfig(baseDir), manager)
+
+    // then
+    expect(runtimeState.members[0]?.sessionId).toBe("member-session")
+    expect(hasApproval("member-session", externalDir)).toBe(true)
+    expect(hasApproval("member-session", unapprovedDir)).toBe(false)
   })
 
   test("persists the resolved subagent_type and model on each spawned runtime member", async () => {

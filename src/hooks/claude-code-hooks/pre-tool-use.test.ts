@@ -5,6 +5,7 @@ import type { ClaudeHooksConfig } from "./types"
 import type { PreToolUseContext } from "./pre-tool-use"
 import * as dispatchHookModule from "./dispatch-hook"
 import * as logger from "../../shared/logger"
+import { clearAllApprovals, hasApproval, recordApproval } from "../../shared/external-directory-approvals"
 import { executePreToolUseHooks } from "./pre-tool-use"
 
 function createContext(overrides?: Partial<PreToolUseContext>): PreToolUseContext {
@@ -25,6 +26,7 @@ describe("executePreToolUseHooks", () => {
   let dispatchSpy: ReturnType<typeof spyOn>
 
   beforeEach(() => {
+    clearAllApprovals()
     dispatchSpy = spyOn(dispatchHookModule, "dispatchHook")
     spyOn(logger, "log").mockImplementation(() => {})
   })
@@ -84,6 +86,86 @@ describe("executePreToolUseHooks", () => {
 
     expect(result.decision).toBe("ask")
     expect(result.reason).toBe("needs confirmation")
+  })
+
+  it("#given external-directory approval is already recorded in the memo #when same child tool accesses it again #then only approved access is suppressed", async () => {
+    //#given a child session hits the Claude-compatible external-directory ask hook
+    dispatchSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        hookSpecificOutput: {
+          permissionDecision: "ask",
+          permissionDecisionReason: "OpenCode needs approval for external_directory /tmp/approved-parent",
+        },
+      }),
+      stderr: "",
+    })
+    const config = createConfig([
+      { matcher: "Write", hooks: [{ type: "command", command: "node external-directory-guard.mjs" }] },
+    ])
+    const childExternalWrite = createContext({
+      sessionId: "ses_child_from_ses_parent",
+      toolName: "write",
+      toolInput: { file_path: "/tmp/approved-parent/repro.md", content: "hello" },
+      cwd: "/home/paul/projects/oh-my-openagent",
+      permissionMode: "plan",
+    })
+
+    const firstResult = await executePreToolUseHooks(childExternalWrite, config)
+    const secondResultBeforeApproval = await executePreToolUseHooks(childExternalWrite, config)
+
+    //#when the external directory is recorded in the memo by an upstream production path
+    recordApproval("ses_child_from_ses_parent", "/tmp/approved-parent")
+    const thirdResultAfterApproval = await executePreToolUseHooks(childExternalWrite, config)
+    const siblingExternalWrite = createContext({
+      sessionId: "ses_child_from_ses_parent",
+      toolName: "write",
+      toolInput: { file_path: "/tmp/other-parent/repro.md", content: "hello" },
+      cwd: "/home/paul/projects/oh-my-openagent",
+      permissionMode: "plan",
+    })
+    const differentDirectoryResult = await executePreToolUseHooks(siblingExternalWrite, config)
+
+    //#then asks do not create approval, but a memo approval suppresses the repeated same-directory ask only
+    expect(firstResult.decision).toBe("ask")
+    expect(secondResultBeforeApproval.decision).toBe("ask")
+    expect(thirdResultAfterApproval.decision).toBe("allow")
+    expect(differentDirectoryResult.decision).toBe("ask")
+    expect(dispatchSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it("#given internal external-directory ask #when the same directory asks again #then the synthetic turn is not recorded as approval", async () => {
+    //#given an internal continuation triggers an external-directory ask
+    dispatchSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        hookSpecificOutput: {
+          permissionDecision: "ask",
+          permissionDecisionReason: "OpenCode needs approval for external_directory '/tmp/internal-parent'",
+        },
+      }),
+      stderr: "",
+    })
+    const config = createConfig([
+      { matcher: "Write", hooks: [{ type: "command", command: "node external-directory-guard.mjs" }] },
+    ])
+    const internalExternalWrite = createContext({
+      sessionId: "ses_internal_external",
+      toolName: "write",
+      toolInput: { file_path: "/tmp/internal-parent/repro.md", content: "hello" },
+      cwd: "/home/paul/projects/oh-my-openagent",
+      internalInitiator: true,
+    })
+
+    //#when the same internal lineage repeats the request
+    const firstResult = await executePreToolUseHooks(internalExternalWrite, config)
+    const secondResult = await executePreToolUseHooks(internalExternalWrite, config)
+
+    //#then no approval memo is created from the synthetic turn
+    expect(firstResult.decision).toBe("ask")
+    expect(secondResult.decision).toBe("ask")
+    expect(hasApproval("ses_internal_external", "/tmp/internal-parent")).toBe(false)
+    expect(dispatchSpy).toHaveBeenCalledTimes(2)
   })
 
   describe("#given multiple hooks with merged config (global + project)", () => {
