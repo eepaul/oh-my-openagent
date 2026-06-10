@@ -41,6 +41,10 @@ export class ParentWakeSessionInspector {
     this.recentParentSessionActivity.set(sessionID, Date.now())
   }
 
+  clearRecentActivity(sessionID: string): void {
+    this.recentParentSessionActivity.delete(sessionID)
+  }
+
   hasRecentActivity(sessionID: string): boolean {
     const windowMs = this.options.parentSessionActivityInProgressWindowMs ?? 0
     if (windowMs <= 0) {

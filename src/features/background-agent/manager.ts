@@ -1748,6 +1748,7 @@ The fallback retry session is now created and can be inspected directly.
       if (!props || typeof props !== "object") return
       const sessionID = resolveSessionEventID(props)
       if (sessionID) {
+        this.parentWakeNotifier.recordParentSessionIdle(sessionID)
         void this.enqueueNotificationForParent(sessionID, () => this.flushPendingParentWake(sessionID)).catch((error) => {
           log("[background-agent] Failed to flush pending parent wake:", { sessionID, error })
         })

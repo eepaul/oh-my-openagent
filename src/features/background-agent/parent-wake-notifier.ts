@@ -4,7 +4,6 @@ import type { ParentWakePromptContext, PendingParentWake } from "./parent-wake-d
 import { ParentWakeDispatchedTracker } from "./parent-wake-dispatched-tracker"
 import { ParentWakeFlushRunner } from "./parent-wake-flush-runner"
 import { ParentWakePendingQueue } from "./parent-wake-pending-queue"
-import type { ToolWaitDeferralDecision } from "./parent-wake-session-history"
 import { ParentWakeSessionInspector } from "./parent-wake-session-inspector"
 import type { ParentWakeNotifierDeps, ParentWakeNotifierOptions } from "./parent-wake-notifier-types"
 import {
@@ -85,6 +84,12 @@ export class ParentWakeNotifier {
     this.sessionInspector.recordActivity(sessionID)
   }
 
+  recordParentSessionIdle(sessionID: string): void {
+    if (!this.pendingQueue.hasWake(sessionID)) {
+      this.sessionInspector.clearRecentActivity(sessionID)
+    }
+  }
+
   queuePendingParentWake(
     sessionID: string,
     notification: string,
@@ -161,12 +166,5 @@ export class ParentWakeNotifier {
 
   private requeueWake(sessionID: string, latestWake: PendingParentWake): void {
     this.pendingQueue.requeueWake(sessionID, latestWake)
-  }
-
-  private async shouldDeferParentWakeForSessionHistory(
-    sessionID: string,
-    wake: PendingParentWake,
-  ): Promise<ToolWaitDeferralDecision> {
-    return this.sessionInspector.shouldDeferForHistory(sessionID, wake)
   }
 }

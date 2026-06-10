@@ -65,27 +65,16 @@ export class ParentWakeFlushRunner {
     const emptyAssistantTurnRetry = latestWake.allowEmptyAssistantTurnRetry === true
     const toolWaitDecision = await this.shouldDeferParentWakeForSessionHistory(sessionID, latestWake)
     if (toolWaitDecision.defer) {
-      await this.sendParentWakePrompt(sessionID, latestWake, {
-        emptyAssistantTurnRetry,
-        toolWaitDecision: { ...toolWaitDecision, skipPromptGateToolStateCheck: true },
-        forceNoReply: true,
+      this.schedulePendingParentWakeFlush(sessionID)
+      log("[background-agent] Deferred parent wake because parent session history is still busy:", {
+        sessionID,
       })
       return
     }
 
     if (await this.isUserMessageInProgress(sessionID)) {
-      // The user just sent a new message into the parent session. Starting a
-      // reply-producing parent-wake right now would race their prompt and, on Electron-hosted
-      // OpenCode (macOS arm64), has been observed to crash the sidecar via
-      // @parcel/watcher TSFN callbacks firing into a torn-down JS env.
-      // Store the wake as noReply so the user's own turn can consume it without
-      // forking another assistant turn. See issue #4120.
-      await this.sendParentWakePrompt(sessionID, latestWake, {
-        emptyAssistantTurnRetry,
-        toolWaitDecision: { defer: false, skipPromptGateToolStateCheck: true },
-        forceNoReply: true,
-      })
-      log("[background-agent] Recorded admit-only parent wake because user message just arrived:", {
+      this.schedulePendingParentWakeFlush(sessionID)
+      log("[background-agent] Deferred parent wake because user message just arrived:", {
         sessionID,
       })
       return
