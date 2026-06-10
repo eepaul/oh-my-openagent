@@ -473,7 +473,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       expect(notificationPayload).toContain("ALL BACKGROUND TASKS COMPLETE")
     })
 
-    test("#when parent status is idle but latest assistant turn is still waiting on tool results #then background completion records a no-reply wake", async () => {
+    test("#when parent status is idle but latest assistant turn is still waiting on tool results #then background completion defers and retains the wake without forking a reply", async () => {
       // given
       const originalDateNow = Date.now
       Date.now = () => 1778820000000
@@ -508,15 +508,14 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         await waitForCoalescedFlush()
 
         // then
-        expect(promptAsyncCalls).toHaveLength(1)
-        expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
-        expect(getPendingParentWakes(manager).has("parent-1")).toBe(false)
+        expect(promptAsyncCalls).toHaveLength(0)
+        expect(getPendingParentWakes(manager).has("parent-1")).toBe(true)
       } finally {
         Date.now = originalDateNow
       }
     })
 
-    test("#when parent status is idle but latest assistant turn has running tool state without finish #then background completion records a no-reply wake", async () => {
+    test("#when parent status is idle but latest assistant turn has running tool state without finish #then background completion defers and retains the wake without forking a reply", async () => {
       // given
       const originalDateNow = Date.now
       Date.now = () => 1778820000000
@@ -554,9 +553,8 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         await waitForCoalescedFlush()
 
         // then
-        expect(promptAsyncCalls).toHaveLength(1)
-        expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
-        expect(getPendingParentWakes(manager).has("parent-1")).toBe(false)
+        expect(promptAsyncCalls).toHaveLength(0)
+        expect(getPendingParentWakes(manager).has("parent-1")).toBe(true)
       } finally {
         Date.now = originalDateNow
       }
@@ -662,7 +660,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       expect(notificationPayload).toContain("ALL BACKGROUND TASKS COMPLETE")
     })
 
-    test("#when stale deferral age is exceeded but latest tool turn is recent #then all-complete wake records a no-reply wake", async () => {
+    test("#when stale deferral age is exceeded but latest tool turn is recent #then all-complete wake defers and retains without forking a reply", async () => {
       // given
       const originalDateNow = Date.now
       Date.now = () => 100_000
@@ -697,9 +695,8 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         await waitForCoalescedFlush()
 
         // then
-        expect(promptAsyncCalls).toHaveLength(1)
-        expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
-        expect(getPendingParentWakes(manager).has("parent-1")).toBe(false)
+        expect(promptAsyncCalls).toHaveLength(0)
+        expect(getPendingParentWakes(manager).has("parent-1")).toBe(true)
       } finally {
         Date.now = originalDateNow
       }

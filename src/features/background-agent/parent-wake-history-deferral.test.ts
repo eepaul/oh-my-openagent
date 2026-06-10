@@ -63,10 +63,10 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
 
     try {
       // when
-      const decision = await notifier["shouldDeferParentWakeForSessionHistory"]("parent-stale-text", pendingWake)
+      await notifier.flushPendingParentWake("parent-stale-text")
 
       // then
-      expect(decision).toEqual({ defer: true, skipPromptGateToolStateCheck: false })
+      expect(notifier.getPendingParentWakes().has("parent-stale-text")).toBe(true)
     } finally {
       Date.now = originalDateNow
       notifier.shutdown()
@@ -129,10 +129,10 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
 
     try {
       // when
-      const decision = await notifier["shouldDeferParentWakeForSessionHistory"]("parent-fresh-text", pendingWake)
+      await notifier.flushPendingParentWake("parent-fresh-text")
 
       // then
-      expect(decision).toEqual({ defer: true, skipPromptGateToolStateCheck: false })
+      expect(notifier.getPendingParentWakes().has("parent-fresh-text")).toBe(true)
     } finally {
       Date.now = originalDateNow
       notifier.shutdown()
@@ -200,8 +200,8 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
       await notifier.flushPendingParentWake("parent-fresh-text-flush")
 
       // then
-      expect(promptAsyncCallCount).toBe(1)
-      expect(notifier.getPendingParentWakes().has("parent-fresh-text-flush")).toBe(false)
+      expect(promptAsyncCallCount).toBe(0)
+      expect(notifier.getPendingParentWakes().has("parent-fresh-text-flush")).toBe(true)
     } finally {
       Date.now = originalDateNow
       notifier.shutdown()
@@ -252,10 +252,10 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
 
     try {
       // when
-      const decision = await notifier["shouldDeferParentWakeForSessionHistory"]("parent-message-error", pendingWake)
+      await notifier.flushPendingParentWake("parent-message-error")
 
       // then
-      expect(decision).toEqual({ defer: true, skipPromptGateToolStateCheck: false })
+      expect(notifier.getPendingParentWakes().has("parent-message-error")).toBe(true)
     } finally {
       notifier.shutdown()
       releaseAllPromptAsyncReservationsForTesting()
@@ -324,10 +324,10 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
 
     try {
       // when
-      const decision = await notifier["shouldDeferParentWakeForSessionHistory"]("parent-fresh-tool-activity", pendingWake)
+      await notifier.flushPendingParentWake("parent-fresh-tool-activity")
 
       // then
-      expect(decision).toEqual({ defer: true, skipPromptGateToolStateCheck: false })
+      expect(notifier.getPendingParentWakes().has("parent-fresh-tool-activity")).toBe(true)
     } finally {
       Date.now = originalDateNow
       notifier.shutdown()
@@ -396,13 +396,10 @@ describe("ParentWakeNotifier — assistant history deferral", () => {
 
     try {
       // when
-      const decision = await notifier["shouldDeferParentWakeForSessionHistory"](
-        "parent-fresh-tool-state-activity",
-        pendingWake,
-      )
+      await notifier.flushPendingParentWake("parent-fresh-tool-state-activity")
 
       // then
-      expect(decision).toEqual({ defer: true, skipPromptGateToolStateCheck: false })
+      expect(notifier.getPendingParentWakes().has("parent-fresh-tool-state-activity")).toBe(true)
     } finally {
       Date.now = originalDateNow
       notifier.shutdown()
