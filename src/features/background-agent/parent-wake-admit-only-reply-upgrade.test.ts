@@ -14,7 +14,7 @@ type SessionMessageStub = {
     finish?: string
     time?: { created?: number }
   }
-  parts?: Array<{ type?: string; text?: string }>
+  parts?: Array<{ type?: string; text?: string; state?: { status?: string } }>
 }
 
 const PROGRESS_WAKE = "<system-reminder>\n[BACKGROUND TASK RESULT READY]\n**ID:** `task-a`\n**1 task still in progress.** You WILL be notified when ALL complete.\n</system-reminder>"
@@ -224,6 +224,35 @@ describe("ParentWakeNotifier — admit-only wake must not suppress a later reply
       expect(promptAsyncCalls[0]?.body.noReply).toBe(false)
       expect(notifier.getDispatchedParentWakes().get(sessionID)?.replyProduced).toBe(true)
       expect(notifier.getPendingParentWakes().has(sessionID)).toBe(false)
+    } finally {
+      notifier.shutdown()
+      releaseAllPromptAsyncReservationsForTesting()
+    }
+  })
+
+  test("#given parent activity is fresh but session history is still busy #when the all-complete wake fires #then it defers without consuming the reply wake", async () => {
+    // given
+    const { notifier, promptAsyncCalls } = createNotifier([
+      {
+        info: { role: "user", time: { created: Date.now() - 20_000 } },
+        parts: [{ type: "text", text: "start background work" }],
+      },
+      {
+        info: { role: "assistant", finish: "tool-calls", time: { created: Date.now() - 1_000 } },
+        parts: [{ type: "tool", state: { status: "running" } }],
+      },
+    ])
+    const sessionID = "parent-fresh-activity-with-busy-history"
+    notifier.recordParentSessionActivity(sessionID)
+    notifier.queuePendingParentWake(sessionID, ALL_COMPLETE_WAKE, { agent: "sisyphus" }, true)
+
+    try {
+      await notifier.flushPendingParentWake(sessionID)
+
+      // then
+      expect(promptAsyncCalls).toHaveLength(0)
+      expect(notifier.getPendingParentWakes().has(sessionID)).toBe(true)
+      expect(notifier.getDispatchedParentWakes().has(sessionID)).toBe(false)
     } finally {
       notifier.shutdown()
       releaseAllPromptAsyncReservationsForTesting()

@@ -54,9 +54,15 @@ export class ParentWakeFlushRunner {
       const recentActivityDecision = latestWake.shouldReply
         ? await this.shouldDeferParentWakeForSessionHistory(sessionID, latestWake)
         : undefined
+      if (recentActivityDecision?.defer === true) {
+        this.schedulePendingParentWakeFlush(sessionID)
+        log("[background-agent] Deferred parent wake because parent session history is still busy:", {
+          sessionID,
+        })
+        return
+      }
       if (
         recentActivityDecision
-        && !recentActivityDecision.defer
         && (recentActivityDecision.inspectedMessageCount ?? 0) > 0
       ) {
         await this.sendParentWakePrompt(sessionID, latestWake, {
