@@ -9,7 +9,9 @@ import { _resetForTesting, setMainSession, subagentSessions } from "../features/
 import { clearPendingModelFallback, createModelFallbackHook } from "../hooks/model-fallback/hook"
 import {
 	clearAllApprovals,
+	clearAllPending,
 	hasApproval,
+	inheritApprovals,
 	recordApproval,
 } from "../shared/external-directory-approvals"
 import { getSessionPromptParams, setSessionPromptParams } from "../shared/session-prompt-params-state"
@@ -152,6 +154,7 @@ afterEach(() => {
 	mock.restore()
 	_resetForTesting()
 	clearAllApprovals()
+	clearAllPending()
 })
 
 describe("event error extraction", () => {
@@ -1620,6 +1623,159 @@ describe("createEventHandler - event forwarding", () => {
 
 		//#then
 		expect(hasApproval(sessionID, externalDirectory)).toBe(false)
+	})
+})
+
+describe("createEventHandler - external-directory approval child/parent lifecycle", () => {
+	function createApprovalLifecycleHandler(): ReturnType<typeof createEventHandler> {
+		return createEventHandler({
+			ctx: {} as never,
+			pluginConfig: {} as never,
+			firstMessageVariantGate: {
+				markSessionCreated: () => {},
+				clear: () => {},
+			},
+			managers: {
+				skillMcpManager: {
+					disconnectSession: async () => {},
+				},
+				tmuxSessionManager: {
+					onSessionCreated: async () => {},
+					onSessionDeleted: async () => {},
+				},
+			} as never,
+			hooks: {} as never,
+		})
+	}
+
+	async function replyForChild(
+		handler: ReturnType<typeof createEventHandler>,
+		sessionID: string,
+		externalDirectory: string,
+		reply: string,
+	): Promise<void> {
+		const requestID = `req_${sessionID}_${reply}`
+		await handler(asEventHandlerInput({
+			event: {
+				type: "permission.asked",
+				properties: {
+					id: requestID,
+					sessionID,
+					permission: "external_directory",
+					metadata: { parentDir: externalDirectory },
+				},
+			},
+		}))
+		await handler(asEventHandlerInput({
+			event: {
+				type: "permission.replied",
+				properties: {
+					sessionID,
+					requestID,
+					reply,
+				},
+			},
+		}))
+	}
+
+	it("does not revoke a parent's inherited approval when a child replies reject", async () => {
+		//#given - the parent has a standing approval the child inherits
+		const parent = "ses_parent_reject"
+		const child = "ses_child_reject"
+		const externalDirectory = "/tmp/omo-child-reject"
+		recordApproval(parent, externalDirectory)
+		inheritApprovals(parent, child)
+		const handler = createApprovalLifecycleHandler()
+
+		//#when - the child is asked for the same dir and replies reject through the real handler
+		await replyForChild(handler, child, externalDirectory, "reject")
+
+		//#then - the parent grant is untouched and the child's inherited copy is not stripped
+		expect(hasApproval(parent, externalDirectory)).toBe(true)
+		expect(hasApproval(child, externalDirectory)).toBe(true)
+	})
+
+	it("does not revoke a parent's inherited approval when a child replies once", async () => {
+		//#given
+		const parent = "ses_parent_once"
+		const child = "ses_child_once"
+		const externalDirectory = "/tmp/omo-child-once"
+		recordApproval(parent, externalDirectory)
+		inheritApprovals(parent, child)
+		const handler = createApprovalLifecycleHandler()
+
+		//#when - a one-time allow affects only this call, never the standing grant
+		await replyForChild(handler, child, externalDirectory, "once")
+
+		//#then
+		expect(hasApproval(parent, externalDirectory)).toBe(true)
+		expect(hasApproval(child, externalDirectory)).toBe(true)
+	})
+
+	it("clears only the deleted session's approvals, leaving an independent session intact", async () => {
+		//#given
+		const handler = createApprovalLifecycleHandler()
+		recordApproval("ses_delete_a", "/tmp/omo-a")
+		recordApproval("ses_delete_b", "/tmp/omo-b")
+
+		//#when - only session a is deleted
+		await handler(asEventHandlerInput({
+			event: {
+				type: "session.deleted",
+				properties: { info: { id: "ses_delete_a" } },
+			},
+		}))
+
+		//#then
+		expect(hasApproval("ses_delete_a", "/tmp/omo-a")).toBe(false)
+		expect(hasApproval("ses_delete_b", "/tmp/omo-b")).toBe(true)
+	})
+
+	it("clears a deleted child session without revoking the parent's approval", async () => {
+		//#given
+		const handler = createApprovalLifecycleHandler()
+		const parent = "ses_parent_delete"
+		const child = "ses_child_delete"
+		const externalDirectory = "/tmp/omo-parent-keeps"
+		recordApproval(parent, externalDirectory)
+		inheritApprovals(parent, child)
+
+		//#when - the CHILD session is deleted
+		await handler(asEventHandlerInput({
+			event: {
+				type: "session.deleted",
+				properties: { info: { id: child } },
+			},
+		}))
+
+		//#then - the child entry is cleared, the parent grant is retained
+		expect(hasApproval(child, externalDirectory)).toBe(false)
+		expect(hasApproval(parent, externalDirectory)).toBe(true)
+	})
+
+	it("deleting one inherited sibling session leaves the other sibling's approval intact", async () => {
+		//#given
+		const handler = createApprovalLifecycleHandler()
+		const parent = "ses_parent_two_kids"
+		const childA = "ses_child_two_kids_a"
+		const childB = "ses_child_two_kids_b"
+		const externalDirectory = "/tmp/omo-siblings"
+		recordApproval(parent, externalDirectory)
+		inheritApprovals(parent, childA)
+		inheritApprovals(parent, childB)
+
+		//#when - only childA is deleted
+		await handler(asEventHandlerInput({
+			event: {
+				type: "session.deleted",
+				properties: { info: { id: childA } },
+			},
+		}))
+
+		//#then
+		expect(hasApproval(childA, externalDirectory)).toBe(false)
+		expect(hasApproval(childB, externalDirectory)).toBe(true)
+		expect(hasApproval(parent, externalDirectory)).toBe(true)
 	})
 })
 
