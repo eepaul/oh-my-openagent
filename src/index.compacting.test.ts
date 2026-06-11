@@ -323,3 +323,38 @@ describe("experimental.compaction.autocontinue handler", () => {
     expect(restoreTodosMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe("external-directory approvals across the full compaction lifecycle", () => {
+  //#given a session approved an external directory before OpenCode compacts it
+  //#when both the session.compacting and compaction.autocontinue handlers run end to end
+  //#then the approval survives the whole lifecycle (only session.deleted clears it)
+  it("survives session.compacting followed by compaction.autocontinue", async () => {
+    //#given
+    const sessionID = "ses_compaction_lifecycle"
+    const externalDirectory = "/tmp/omo-external-lifecycle"
+    recordApproval(sessionID, externalDirectory)
+    const compactingHandler = createSessionCompactingHandler({
+      compactionContextInjector: {
+        capture: mock(async () => {}),
+        inject: mock(() => "lifecycle-context"),
+      },
+      compactionTodoPreserver: { capture: mock(async () => {}) },
+      claudeCodeHooks: {
+        "experimental.session.compacting": mock(async () => {}),
+      },
+    })
+    const autocontinueHandler = createCompactionAutocontinueHandler({
+      compactionContextInjector: { restore: mock(async () => true) },
+      compactionTodoPreserver: { restore: mock(async () => {}) },
+    })
+    const compactingOutput = { context: [] as string[], prompt: undefined as string | undefined }
+    const autocontinueOutput = { enabled: true }
+
+    //#when
+    await compactingHandler({ sessionID }, compactingOutput)
+    await autocontinueHandler({ sessionID }, autocontinueOutput)
+
+    //#then
+    expect(hasApproval(sessionID, externalDirectory)).toBe(true)
+  })
+})
