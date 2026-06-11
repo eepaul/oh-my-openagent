@@ -1,8 +1,9 @@
 import { log, promptWithRetryInDirectory } from "../../shared"
 import { stripAgentListSortPrefix } from "../../shared/agent-display-names"
-import { inheritApprovals } from "../../shared/external-directory-approvals"
+import { inheritApprovals, listApprovedDirectories } from "../../shared/external-directory-approvals"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { setSessionTools } from "../../shared/session-tools-store"
+import { withExternalDirectoryApprovalRules } from "../../shared/question-denied-session-permission"
 import { isInsideTmux } from "../../shared/tmux"
 import { setSessionAgent, subagentSessions, updateSessionAgent } from "../claude-code-session-state"
 import { getTaskToastManager } from "../task-toast-manager"
@@ -55,10 +56,16 @@ export async function startTask(
   const parentDirectory = parentSession?.data?.directory ?? directory
   log(`[background-agent] Parent dir: ${parentSession?.data?.directory}, using: ${parentDirectory}`)
 
+  const approvalSourceSessionID = input.approvalSourceSessionId ?? input.parentSessionId
+  const sessionPermission = withExternalDirectoryApprovalRules(
+    input.sessionPermission,
+    listApprovedDirectories(approvalSourceSessionID),
+  )
+
   const createResult = await client.session.create({
     body: {
       parentID: input.parentSessionId,
-      ...(input.sessionPermission ? { permission: input.sessionPermission } : {}),
+      ...(sessionPermission ? { permission: sessionPermission } : {}),
     } as Record<string, unknown>,
     query: {
       directory: parentDirectory,
@@ -74,7 +81,7 @@ export async function startTask(
   }
 
   const sessionID = createResult.data.id
-  inheritApprovals(input.approvalSourceSessionId ?? input.parentSessionId, sessionID)
+  inheritApprovals(approvalSourceSessionID, sessionID)
   const normalizedAgent = stripAgentListSortPrefix(input.agent)
   await input.onSessionCreated?.(sessionID)
   subagentSessions.add(sessionID)

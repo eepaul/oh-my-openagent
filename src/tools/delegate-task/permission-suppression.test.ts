@@ -50,9 +50,9 @@ function ruleArrayGrantsExternalDirectory(permission: unknown): boolean {
   )
 }
 
-describe("A1 probe (real wiring): external_directory grant in the child-spawn request", () => {
-  describe("#given the real createSyncSession child-spawn path", () => {
-    test("#when a child session is created #then the actual request carries NO external_directory grant (allow does not propagate)", async () => {
+describe("A1 probe (real wiring): external_directory grant without parent approval", () => {
+  describe("#given the real createSyncSession child-spawn path without stored approvals", () => {
+    test("#when a child session is created #then the actual request carries NO external_directory grant", async () => {
       // given — the real child-spawn function, with a client that captures the
       // exact request object the repo builds
       const createCalls: Array<Record<string, unknown>> = []
@@ -79,7 +79,7 @@ describe("A1 probe (real wiring): external_directory grant in the child-spawn re
     })
   })
 
-  describe("#given the current control payload on the same real path", () => {
+  describe("#given the unapproved control payload on the same real path", () => {
     test("#when a child session is created #then body.permission is QUESTION_DENIED_SESSION_PERMISSION, which lacks external_directory (child still prompts)", async () => {
       // given
       const createCalls: Array<Record<string, unknown>> = []
@@ -94,7 +94,7 @@ describe("A1 probe (real wiring): external_directory grant in the child-spawn re
       })
 
       // then — the actual permission shipped is the current control rule array;
-      // it grants only "question", so the child's external-directory prompt is
+      // no parent approval exists, so the child's external-directory prompt is
       // NOT suppressed and the control remains sensitive
       const body = createCalls[0]?.body as { permission?: unknown }
       expect(body?.permission).toEqual(QUESTION_DENIED_SESSION_PERMISSION)

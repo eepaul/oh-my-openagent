@@ -41,6 +41,42 @@ describe("createSyncSession", () => {
     })
   })
 
+  test("seeds child permission rules from parent-approved directories", async () => {
+    // given
+    const approvedDir = "/approved/external"
+    const createCalls: Array<Record<string, unknown>> = []
+    recordApproval("ses_parent", approvedDir)
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/parent" } }),
+        create: async (input: Record<string, unknown>) => {
+          createCalls.push(input)
+          return { data: { id: "ses_child" } }
+        },
+      },
+    }
+
+    // when
+    const result = await createSyncSession(client as never, {
+      parentSessionID: "ses_parent",
+      agentToUse: "explore",
+      description: "seeded task",
+      defaultDirectory: "/fallback",
+    })
+
+    // then
+    expect(result).toEqual({ ok: true, sessionID: "ses_child", parentDirectory: "/parent" })
+    expect(createCalls).toHaveLength(1)
+    expect(createCalls[0]?.body).toEqual({
+      parentID: "ses_parent",
+      title: "seeded task (@explore subagent)",
+      permission: [
+        { permission: "question", action: "deny", pattern: "*" },
+        { permission: "external_directory", action: "allow", pattern: "/approved/external/**" },
+      ],
+    })
+  })
+
   test("inherits parent-approved directories without granting unapproved siblings", async () => {
     // given
     const approvedDir = "/approved/external"
