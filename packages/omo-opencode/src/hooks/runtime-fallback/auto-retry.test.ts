@@ -202,4 +202,53 @@ describe("createAutoRetryHelpers", () => {
     expect(deps.sessionLastAccess.has(sessionID)).toBe(false)
     expect(deps.internallyAbortedSessions.has(sessionID)).toBe(false)
   })
+
+  test("#given a first fallback attempt is skipped because the just-aborted session still reads active #when auto retry runs #then the awaiting flag and fallback timeout stay armed so the timeout-driven retry recovers (no permanent freeze)", async () => {
+    // given - the just-aborted session still reports busy (session.status is
+    // eventually-consistent), timeout escalation is enabled, and this is the
+    // first fallback attempt (sessionAwaitingFallbackResult is not pre-set)
+    const promptCalls = { count: 0 }
+    const deps = createDeps(promptCalls)
+    deps.config.timeout_seconds = 30
+    const sessionID = "session-first-message-busy"
+    deps.ctx.client.session.status = async () => ({ data: { [sessionID]: { type: "busy" } } })
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.5"))
+    const helpers = createAutoRetryHelpers(deps)
+
+    // when
+    await helpers.autoRetryWithFallback(sessionID, "opencode-go/kimi-k2.6", undefined, "session.status")
+
+    // then - prompt skipped (session still active) but the recovery path is
+    // preserved instead of torn down, so the armed timeout can retry once the
+    // session settles to idle
+    expect(promptCalls.count).toBe(0)
+    expect(deps.sessionAwaitingFallbackResult.has(sessionID)).toBe(true)
+    expect(deps.sessionFallbackTimeouts.has(sessionID)).toBe(true)
+
+    helpers.clearSessionFallbackTimeout(sessionID)
+  })
+
+  test("#given the just-aborted assistant turn would trip the gate tool-state guard #when auto retry runs #then the fallback still dispatches because runtime-fallback bypasses checkToolState", async () => {
+    // given - session status is idle, but the aborted assistant turn (no finish
+    // marker, empty parts) makes latestAssistantTurnBlocksInternalPrompt report
+    // the assistant as still active (a false positive after our own abort)
+    const promptCalls = { count: 0 }
+    const deps = createDeps(promptCalls)
+    const sessionID = "session-aborted-turn-blocks"
+    deps.ctx.client.session.status = async () => ({ data: {} })
+    deps.ctx.client.session.messages = async () => ({
+      data: [
+        { info: { role: "user", id: "msg_u" }, parts: [{ type: "text", text: "do X", id: "p1" }] },
+        { info: { role: "assistant", id: "msg_a" }, parts: [] },
+      ],
+    })
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.5"))
+    const helpers = createAutoRetryHelpers(deps)
+
+    // when
+    await helpers.autoRetryWithFallback(sessionID, "opencode-go/kimi-k2.6", undefined, "session.status")
+
+    // then - the tool-state guard is bypassed so the fallback actually dispatches
+    expect(promptCalls.count).toBe(1)
+  })
 })

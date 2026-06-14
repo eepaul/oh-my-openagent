@@ -65,3 +65,12 @@ export const HOOK_NAME = "runtime-fallback"
  * would otherwise be the only safety net.
  */
 export const DEFAULT_FIRST_PROMPT_WATCHDOG_MS = 90_000
+
+/**
+ * Settle window (ms) the fallback re-dispatch waits before the prompt-async gate
+ * reads session.status. session.status is eventually-consistent, so a session we
+ * just aborted still reads `retry`/`busy` ("active") briefly; a zero settle made
+ * the gate drop the fallback on a session's first message. Production injects
+ * this; the dispatcher defaults to 0 so unit tests stay free of real timers.
+ */
+export const FALLBACK_DISPATCH_SETTLE_MS = 500

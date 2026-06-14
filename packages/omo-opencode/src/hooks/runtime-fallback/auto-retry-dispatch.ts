@@ -20,6 +20,7 @@ export function createAutoRetryDispatcher(
 ) {
   const {
     ctx,
+    options,
     sessionStates,
     sessionRetryInFlight,
     sessionAwaitingFallbackResult,
@@ -62,6 +63,7 @@ export function createAutoRetryDispatcher(
     sessionRetryInFlight.add(sessionID)
     let retryDispatched = false
     let retryMayHaveBeenAccepted = false
+    let retryDeferredByBusySession = false
     try {
       const messagesResp = await ctx.client.session.messages({
         path: { id: sessionID },
@@ -106,8 +108,14 @@ export function createAutoRetryDispatcher(
         client: ctx.client,
         sessionID,
         source: `runtime-fallback:${source}`,
-        settleMs: 0,
+        settleMs: options?.dispatch_settle_ms ?? 0,
         queueBehavior: "defer",
+        // We abort the rate-limited turn before re-dispatching, so the aborted
+        // assistant message (no finish marker / no output) trips the gate's
+        // "latest assistant still active" tool-state guard as a false positive
+        // and blocks every fallback. Bypass it here; any dangling tool state is
+        // reconciled by the session-recovery tool_result_missing hook.
+        checkToolState: false,
         input: {
           path: { id: sessionID },
           body: {
@@ -150,8 +158,9 @@ export function createAutoRetryDispatcher(
             client: ctx.client,
             sessionID,
             source: `runtime-fallback:${source}:reserved-retry-${attempt + 1}`,
-            settleMs: 0,
+            settleMs: options?.dispatch_settle_ms ?? 0,
             queueBehavior: "defer",
+            checkToolState: false,
             input: {
               path: { id: sessionID },
               body: {
@@ -178,16 +187,21 @@ export function createAutoRetryDispatcher(
           throw reservedResult.error
         }
         if (!isInternalPromptDispatchAccepted(reservedResult)) {
+          retryDeferredByBusySession =
+            reservedResult.status === "active" || reservedResult.status === "reserved"
           log(`[${HOOK_NAME}] Auto-retry skipped by promptAsync gate after reserved retries (${source})`, {
             sessionID,
             status: reservedResult.status,
+            willRetryViaTimeout: retryDeferredByBusySession,
           })
           return
         }
       } else if (!isInternalPromptDispatchAccepted(promptResult)) {
+        retryDeferredByBusySession = promptResult.status === "active"
         log(`[${HOOK_NAME}] Auto-retry skipped by promptAsync gate (${source})`, {
           sessionID,
           status: promptResult.status,
+          willRetryViaTimeout: retryDeferredByBusySession,
         })
         return
       }
@@ -215,7 +229,8 @@ export function createAutoRetryDispatcher(
         }
       }
       if (!retryDispatched && !retryMayHaveBeenAccepted) {
-        if (hadAwaitingFallbackResult) {
+        const keepFallbackArmed = hadAwaitingFallbackResult || retryDeferredByBusySession
+        if (keepFallbackArmed) {
           sessionAwaitingFallbackResult.add(sessionID)
         } else {
           sessionAwaitingFallbackResult.delete(sessionID)
@@ -223,7 +238,7 @@ export function createAutoRetryDispatcher(
         }
         const state = sessionStates.get(sessionID)
         if (state) {
-          if (hadAwaitingFallbackResult) {
+          if (keepFallbackArmed) {
             state.pendingFallbackModel = previousPendingFallbackModel
             state.pendingFallbackPromptMayHaveBeenAccepted = previousPendingFallbackPromptMayHaveBeenAccepted
           } else if (state.pendingFallbackModel) {

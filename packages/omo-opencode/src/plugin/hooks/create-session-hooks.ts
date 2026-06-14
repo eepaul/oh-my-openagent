@@ -26,6 +26,7 @@ import {
   createQuestionLabelTruncatorHook,
   createPreemptiveCompactionHook,
   createRuntimeFallbackHook,
+  FALLBACK_DISPATCH_SETTLE_MS,
   createLegacyPluginToastHook,
 } from "../../hooks"
 import {
@@ -215,6 +216,7 @@ export function createSessionHooks(args: {
         createRuntimeFallbackHook(ctx, {
           config: runtimeFallbackConfig,
           pluginConfig,
+          dispatch_settle_ms: FALLBACK_DISPATCH_SETTLE_MS,
         }))
     : null
 

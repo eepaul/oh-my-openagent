@@ -58,6 +58,13 @@ export interface RuntimeFallbackOptions {
   config?: RuntimeFallbackConfig
   pluginConfig?: OhMyOpenCodeConfig
   session_timeout_ms?: number
+  /**
+   * Settle window (ms) the fallback re-dispatch waits before the prompt-async
+   * gate reads session.status, so a just-aborted session can transition from
+   * `retry`/`busy` to idle. Production injects FALLBACK_DISPATCH_SETTLE_MS;
+   * defaults to 0 (no real timer) for unit tests.
+   */
+  dispatch_settle_ms?: number
 }
 
 export interface RuntimeFallbackHook {
