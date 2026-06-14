@@ -25,6 +25,7 @@ import {
   clearDelegatedChildSessionBootstrap,
   registerDelegatedChildSessionBootstrap,
 } from "../../shared/delegated-child-session-bootstrap"
+import { inheritApprovals, listApprovedDirectories } from "../../shared/external-directory-approvals"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
 import {
   hasMoreFallbacks,
@@ -33,6 +34,7 @@ import {
 import { SessionCategoryRegistry } from "../../shared/session-category-registry"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { setSessionTools } from "../../shared/session-tools-store"
+import { withExternalDirectoryApprovalRules } from "../../shared/question-denied-session-permission"
 import { isInsideTmux } from "../../shared/tmux"
 import { clearSessionAgent, setSessionAgent, subagentSessions, updateSessionAgent } from "../claude-code-session-state"
 import { MESSAGE_STORAGE } from "../hook-message-injector"
@@ -750,11 +752,17 @@ export class BackgroundManager {
     const parentDirectory = parentSession?.data?.directory ?? this.directory
     log(`[background-agent] Parent dir: ${parentSession?.data?.directory}, using: ${parentDirectory}`)
 
+    const approvalSourceSessionID = input.approvalSourceSessionId ?? input.parentSessionId
+    const sessionPermission = withExternalDirectoryApprovalRules(
+      input.sessionPermission,
+      listApprovedDirectories(approvalSourceSessionID),
+    )
+
     const createResult = await this.client.session.create({
       body: {
         parentID: input.parentSessionId,
         title: `${input.description} (@${input.agent} subagent)`,
-        ...(input.sessionPermission ? { permission: input.sessionPermission } : {}),
+        ...(sessionPermission ? { permission: sessionPermission } : {}),
         ...(input.model
           ? {
               model: {
@@ -779,6 +787,7 @@ export class BackgroundManager {
     }
 
     const sessionID = createResult.data.id
+    inheritApprovals(approvalSourceSessionID, sessionID)
 
     if (task.status === "cancelled") {
       clearDelegatedChildSessionBootstrap(sessionID)

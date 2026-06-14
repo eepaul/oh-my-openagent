@@ -120,6 +120,8 @@ export interface LaunchInput {
   skillContent?: string
   category?: string
   sessionPermission?: SessionPermissionRule[]
+  /** Session whose external-directory approval memo should seed this child. Defaults to parentSessionId. */
+  approvalSourceSessionId?: string
   onSessionCreated?: (sessionId: string) => void | Promise<void>
   /** User tool overrides (ask/allow/deny) from category or agent config. Merged into launchTools before hardcoded restrictions. */
   userPermission?: Record<string, "ask" | "allow" | "deny">

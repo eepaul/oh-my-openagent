@@ -1,9 +1,18 @@
-import { describe, expect, it, mock } from "bun:test"
+import { afterEach, describe, expect, it, mock } from "bun:test"
 
 import {
   createCompactionAutocontinueHandler,
   createSessionCompactingHandler,
 } from "./plugin/session-compacting"
+import {
+  clearAllApprovals,
+  hasApproval,
+  recordApproval,
+} from "./shared/external-directory-approvals"
+
+afterEach(() => {
+  clearAllApprovals()
+})
 
 describe("experimental.session.compacting handler", () => {
   //#given all three hooks are present
@@ -114,7 +123,7 @@ describe("experimental.session.compacting handler", () => {
   //#when compacting handler is invoked
   //#then compaction still continues so the user does not see a failed compact
   it("continues compaction when an internal preservation hook throws", async () => {
-    const preCompactMock = mock(async (_input, output: { context: string[] }) => {
+    const preCompactMock = mock(async (_input: unknown, output: { context: string[] }) => {
       output.context.push("precompact-context")
     })
 
@@ -135,7 +144,7 @@ describe("experimental.session.compacting handler", () => {
 
     const output = { context: [] as string[], prompt: undefined as string | undefined }
 
-    await expect(handler({ sessionID: "ses_test" }, output)).resolves.toBeUndefined()
+    await handler({ sessionID: "ses_test" }, output)
     expect(preCompactMock).toHaveBeenCalled()
     expect(output.context).toContain("precompact-context")
   })
@@ -146,7 +155,7 @@ describe("experimental.session.compacting handler", () => {
   it("preserves prompt replacement from PreCompact hooks", async () => {
     const handler = createSessionCompactingHandler({
       claudeCodeHooks: {
-        "experimental.session.compacting": mock(async (_input, output) => {
+        "experimental.session.compacting": mock(async (_input: unknown, output: { prompt?: string }) => {
           output.prompt = "custom compaction prompt"
         }),
       },
@@ -156,6 +165,21 @@ describe("experimental.session.compacting handler", () => {
     await handler({ sessionID: "ses_prompt" }, output)
 
     expect(output.prompt).toBe("custom compaction prompt")
+  })
+
+  it("preserves external-directory approvals while capturing compaction state", async () => {
+    //#given
+    const sessionID = "ses_compaction_approval"
+    const externalDirectory = "/tmp/omo-external-compaction"
+    recordApproval(sessionID, externalDirectory)
+    const handler = createSessionCompactingHandler({})
+    const output = { context: [] as string[], prompt: undefined as string | undefined }
+
+    //#when
+    await handler({ sessionID }, output)
+
+    //#then
+    expect(hasApproval(sessionID, externalDirectory)).toBe(true)
   })
 })
 
@@ -186,11 +210,11 @@ describe("experimental.compaction.autocontinue handler", () => {
       callOrder.push("context")
       return true
     })
-    const restoreMock = mock(async () => {})
+    const restoreMock = mock(async (_sessionID?: string) => {})
     const handler = createCompactionAutocontinueHandler({
       compactionContextInjector: { restore: restoreContextMock },
       compactionTodoPreserver: {
-        restore: mock(async (sessionID: string) => {
+        restore: mock(async (sessionID?: string) => {
           callOrder.push(`todos:${sessionID}`)
           await restoreMock(sessionID)
         }),
@@ -208,6 +232,22 @@ describe("experimental.compaction.autocontinue handler", () => {
     expect(output.enabled).toBe(true)
   })
 
+  it("preserves external-directory approvals through autocontinue restore", async () => {
+    //#given
+    const sessionID = "ses_autocontinue_approval"
+    const externalDirectory = "/tmp/omo-external-autocontinue"
+    recordApproval(sessionID, externalDirectory)
+    const handler = createCompactionAutocontinueHandler({})
+    const output = { enabled: true }
+
+    //#when
+    await handler({ sessionID }, output)
+
+    //#then
+    expect(output.enabled).toBe(true)
+    expect(hasApproval(sessionID, externalDirectory)).toBe(true)
+  })
+
   it("continues autocontinue restore when one restore hook throws", async () => {
     //#given
     const restoreMock = mock(async () => {})
@@ -222,7 +262,7 @@ describe("experimental.compaction.autocontinue handler", () => {
     const output = { enabled: true }
 
     //#when
-    await expect(handler({ sessionID: "ses_autocontinue" }, output)).resolves.toBeUndefined()
+    await handler({ sessionID: "ses_autocontinue" }, output)
 
     //#then
     expect(restoreMock).toHaveBeenCalledWith("ses_autocontinue")
@@ -278,5 +318,40 @@ describe("experimental.compaction.autocontinue handler", () => {
     expect(laterOutput.enabled).toBe(true)
     expect(restoreContextMock).toHaveBeenCalledTimes(2)
     expect(restoreTodosMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("external-directory approvals across the full compaction lifecycle", () => {
+  //#given a session approved an external directory before OpenCode compacts it
+  //#when both the session.compacting and compaction.autocontinue handlers run end to end
+  //#then the approval survives the whole lifecycle (only session.deleted clears it)
+  it("survives session.compacting followed by compaction.autocontinue", async () => {
+    //#given
+    const sessionID = "ses_compaction_lifecycle"
+    const externalDirectory = "/tmp/omo-external-lifecycle"
+    recordApproval(sessionID, externalDirectory)
+    const compactingHandler = createSessionCompactingHandler({
+      compactionContextInjector: {
+        capture: mock(async () => {}),
+        inject: mock(() => "lifecycle-context"),
+      },
+      compactionTodoPreserver: { capture: mock(async () => {}) },
+      claudeCodeHooks: {
+        "experimental.session.compacting": mock(async () => {}),
+      },
+    })
+    const autocontinueHandler = createCompactionAutocontinueHandler({
+      compactionContextInjector: { restore: mock(async () => true) },
+      compactionTodoPreserver: { restore: mock(async () => {}) },
+    })
+    const compactingOutput = { context: [] as string[], prompt: undefined as string | undefined }
+    const autocontinueOutput = { enabled: true }
+
+    //#when
+    await compactingHandler({ sessionID }, compactingOutput)
+    await autocontinueHandler({ sessionID }, autocontinueOutput)
+
+    //#then
+    expect(hasApproval(sessionID, externalDirectory)).toBe(true)
   })
 })

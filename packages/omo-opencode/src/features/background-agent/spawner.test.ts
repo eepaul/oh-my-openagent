@@ -3,6 +3,7 @@ import {
   clearSessionPromptParams,
   getSessionPromptParams,
 } from "../../shared/session-prompt-params-state"
+import { clearAllApprovals, hasApproval, recordApproval } from "../../shared/external-directory-approvals"
 import { releaseAllPromptAsyncReservationsForTesting } from "../../shared/prompt-async-gate"
 import { buildFallbackBody, createTask, isAgentNotFoundError, startTask } from "./spawner"
 import type { BackgroundTask } from "./types"
@@ -19,6 +20,10 @@ type PromptRequest = {
     options?: unknown
   }
 }
+
+afterEach(() => {
+  clearAllApprovals()
+})
 
 /**
  * Poll until `fn()` returns true or timeout elapses.
@@ -789,6 +794,114 @@ describe("background-agent spawner fallback model promotion", () => {
     expect(dispatchedAgent).toBe("Hephaestus - Deep Agent")
     expect(getSessionAgent(sessionID)).toBe(dispatchedAgent)
   })
+})
+
+describe("background-agent spawner external directory approval inheritance", () => {
+  test("inherits parent-approved directories without approving a second directory", async () => {
+    //#given
+    const approvedDir = "/approved/external"
+    const unapprovedDir = "/unapproved/external"
+    recordApproval("ses_parent", approvedDir)
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/tmp/test" } }),
+        create: async () => ({ data: { id: "ses_child" } }),
+        promptAsync: async () => ({ data: {} }),
+      },
+    } as never
+    const task = createTask({
+      description: "Test task",
+      prompt: "Do work",
+      agent: "explore",
+      parentSessionId: "ses_parent",
+      parentMessageId: "msg_parent",
+    })
+    const item = {
+      task,
+      input: {
+        description: task.description,
+        prompt: task.prompt,
+        agent: task.agent,
+        parentSessionId: task.parentSessionId,
+        parentMessageId: task.parentMessageId,
+      },
+    }
+
+    //#when
+    await startTask(item as never, {
+      client,
+      directory: "/tmp/test",
+      concurrencyManager: { release: () => {} },
+      tmuxEnabled: false,
+      onTaskError: () => {},
+    } as never)
+
+    //#then
+    expect(hasApproval("ses_child", approvedDir)).toBe(true)
+    expect(hasApproval("ses_child", unapprovedDir)).toBe(false)
+  })
+
+  test("seeds child permission rules from the explicit approval source before create", async () => {
+    //#given
+    const approvedDir = "/retry/approved/external"
+    const parentOnlyDir = "/parent/only/external"
+    const createCalls: Array<Record<string, unknown>> = []
+    recordApproval("ses_previous_child", approvedDir)
+    recordApproval("ses_parent", parentOnlyDir)
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/tmp/test" } }),
+        create: async (input: Record<string, unknown>) => {
+          createCalls.push(input)
+          return { data: { id: "ses_child" } }
+        },
+        promptAsync: async () => ({ data: {} }),
+      },
+    } as never
+    const task = createTask({
+      description: "Test task",
+      prompt: "Do work",
+      agent: "explore",
+      parentSessionId: "ses_parent",
+      parentMessageId: "msg_parent",
+      sessionPermission: [
+        { permission: "question", action: "deny", pattern: "*" },
+      ],
+    })
+    const item = {
+      task,
+      input: {
+        description: task.description,
+        prompt: task.prompt,
+        agent: task.agent,
+        parentSessionId: task.parentSessionId,
+        parentMessageId: task.parentMessageId,
+        sessionPermission: task.sessionPermission,
+        approvalSourceSessionId: "ses_previous_child",
+      },
+    }
+
+    //#when
+    await startTask(item as never, {
+      client,
+      directory: "/tmp/test",
+      concurrencyManager: { release: () => {} },
+      tmuxEnabled: false,
+      onTaskError: () => {},
+    } as never)
+
+    //#then
+    expect(createCalls).toHaveLength(1)
+    expect(createCalls[0]?.body).toEqual({
+      parentID: "ses_parent",
+      permission: [
+        { permission: "question", action: "deny", pattern: "*" },
+        { permission: "external_directory", action: "allow", pattern: "/retry/approved/external/**" },
+      ],
+    })
+    expect(JSON.stringify(createCalls[0]?.body)).not.toContain(parentOnlyDir)
+  })
+
 })
 
 describe("background-agent spawner tmux callback ordering", () => {

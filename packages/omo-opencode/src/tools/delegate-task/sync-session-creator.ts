@@ -1,6 +1,7 @@
 import type { OpencodeClient } from "./types"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
-import { QUESTION_DENIED_SESSION_PERMISSION } from "../../shared/question-denied-session-permission"
+import { inheritApprovals, listApprovedDirectories } from "../../shared/external-directory-approvals"
+import { QUESTION_DENIED_SESSION_PERMISSION, withExternalDirectoryApprovalRules } from "../../shared/question-denied-session-permission"
 
 export async function createSyncSession(
   client: OpencodeClient,
@@ -17,11 +18,16 @@ export async function createSyncSession(
     : null
   const parentDirectory = parentSession?.data?.directory ?? input.defaultDirectory
 
+  const sessionPermission = withExternalDirectoryApprovalRules(
+    QUESTION_DENIED_SESSION_PERMISSION,
+    listApprovedDirectories(input.parentSessionID),
+  )
+
   const createResult = await client.session.create({
     body: {
       parentID: input.parentSessionID,
       title: `${input.description} (@${input.agentToUse} subagent)`,
-      permission: QUESTION_DENIED_SESSION_PERMISSION,
+      permission: sessionPermission,
       ...(input.categoryModel
         ? {
             model: {
@@ -41,5 +47,8 @@ export async function createSyncSession(
     return { ok: false, error: `Failed to create session: ${createResult.error}` }
   }
 
-  return { ok: true, sessionID: createResult.data.id, parentDirectory }
+  const sessionID = createResult.data.id
+  inheritApprovals(input.parentSessionID, sessionID)
+
+  return { ok: true, sessionID, parentDirectory }
 }

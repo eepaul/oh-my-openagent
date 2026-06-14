@@ -22,6 +22,7 @@ import {
   TMUX_ACTIVITY_EVENT_TYPES,
 } from "./event-session-lifecycle";
 import { createEventTeamHandlers } from "./event-team-handlers";
+import { handlePermissionApprovalEvent } from "./event-permission-approval";
 import type { EventInput, FirstMessageVariantGate, PluginEventContext } from "./event-types";
 
 export { extractErrorMessage } from "./event-error-utils";
@@ -133,6 +134,8 @@ export function createEventHandler(args: {
 
     const { event } = input;
     const props = event.properties as Record<string, unknown> | undefined;
+
+    handlePermissionApprovalEvent(event);
 
     if (tmuxIntegrationEnabled && TMUX_ACTIVITY_EVENT_TYPES.has(event.type)) {
       managers.tmuxSessionManager.onEvent?.(event as { type: string; properties?: Record<string, unknown> });
