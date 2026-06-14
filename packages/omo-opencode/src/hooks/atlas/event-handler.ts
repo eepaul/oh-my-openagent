@@ -1,10 +1,46 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { log } from "../../shared/logger"
+import { getWorkForSession } from "../../features/boulder-state"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
+import type { InternalInitiatorTextPartLike } from "../../shared/internal-initiator-marker"
+import { isRealUserMessage } from "../../shared/internal-initiator-marker"
+import { log } from "../../shared/logger"
+import { clearFinalWaveGate } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { isAbortError } from "./is-abort-error"
 import { handleAtlasSessionIdle } from "./idle-event"
 import type { AtlasHookOptions, SessionState } from "./types"
+
+const FINAL_WAVE_CLEAR_GRACE_MS = 15000
+
+const lastCompactedAt = new Map<string, number>()
+
+function isEventPart(value: unknown): value is InternalInitiatorTextPartLike {
+  if (typeof value !== "object" || value === null) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  const type = record.type
+  const text = record.text
+  const synthetic = record.synthetic
+
+  return (
+    (type === undefined || typeof type === "string") &&
+    (text === undefined || typeof text === "string") &&
+    (synthetic === undefined || typeof synthetic === "boolean")
+  )
+}
+
+function resolveEventParts(
+  properties: Record<string, unknown> | undefined,
+): InternalInitiatorTextPartLike[] | undefined {
+  const parts = properties?.parts
+  if (!Array.isArray(parts) || !parts.every(isEventPart)) {
+    return undefined
+  }
+
+  return parts
+}
 
 export function createAtlasEventHandler(input: {
   ctx: PluginInput
@@ -47,18 +83,26 @@ export function createAtlasEventHandler(input: {
     }
 
     if (event.type === "message.updated") {
-      const info = props?.info as Record<string, unknown> | undefined
       const sessionID = resolveMessageEventSessionID(props)
-      const role = info?.role as string | undefined
       if (!sessionID) return
+
+      const info = props?.info as { role?: string } | undefined
+      const parts = resolveEventParts(props)
 
       const state = sessions.get(sessionID)
       if (state) {
         state.lastEventWasAbortError = false
         state.skipNextIdleAfterRuntimeErrorRetry = false
-        if (role === "user") {
+      }
+
+      const compactedAt = lastCompactedAt.get(sessionID) ?? 0
+      const isPastCompactionGrace = Date.now() - compactedAt > FINAL_WAVE_CLEAR_GRACE_MS
+      if (isRealUserMessage({ info, parts }) && isPastCompactionGrace) {
+        if (state) {
           state.waitingForFinalWaveApproval = false
         }
+        const work = getWorkForSession(ctx.directory, sessionID)
+        clearFinalWaveGate(ctx.directory, work?.work_id ?? "")
       }
       return
     }
@@ -107,6 +151,7 @@ export function createAtlasEventHandler(input: {
     if (event.type === "session.compacted") {
       const sessionID = resolveSessionEventID(props)
       if (sessionID) {
+        lastCompactedAt.set(sessionID, Date.now())
         const compactedState = sessions.get(sessionID)
         if (compactedState?.pendingRetryTimer) {
           clearTimeout(compactedState.pendingRetryTimer)

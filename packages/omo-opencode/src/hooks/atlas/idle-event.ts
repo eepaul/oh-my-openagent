@@ -1,10 +1,12 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import {
+  getWorkForSession,
   normalizeSessionId,
   resolveBoulderPlanPath,
 } from "../../features/boulder-state"
 import { log } from "../../shared/logger"
 import { shouldPromptAfterSessionIdle } from "../shared/session-idle-settle"
+import { isAwaitingFinalWaveApproval } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { handleCompletedBoulderIdle } from "./idle-completion-nudge"
 import { hasRunningBackgroundTasks, injectContinuation, scheduleRetry } from "./idle-continuation"
@@ -77,10 +79,17 @@ export async function handleAtlasSessionIdle(input: {
   const activePlanPath = resolveBoulderPlanPath(ctx.directory, boulderState)
   resetStallStateForPlanChange(sessionState, activePlanPath)
 
-  if (sessionState.waitingForFinalWaveApproval) {
-    log(`[${HOOK_NAME}] Skipped: waiting for explicit final-wave approval`, { sessionID })
+  const finalWaveWorkId = boulderState.active_work_id
+    ?? getWorkForSession(ctx.directory, sessionID)?.work_id
+  if (finalWaveWorkId && isAwaitingFinalWaveApproval(ctx.directory, finalWaveWorkId, activePlanPath)) {
+    sessionState.waitingForFinalWaveApproval = true
+    log(`[${HOOK_NAME}] Skipped: awaiting durable final-wave approval`, {
+      sessionID,
+      workId: finalWaveWorkId,
+    })
     return
   }
+  sessionState.waitingForFinalWaveApproval = false
 
   if (sessionState.stalledContinuationReason) {
     log(`[${HOOK_NAME}] Skipped: boulder continuation stalled`, {

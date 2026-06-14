@@ -10,6 +10,7 @@ import {
   releaseAllPromptAsyncReservationsForTesting,
   releasePromptAsyncReservation,
 } from "../shared/prompt-async-gate"
+import { readFinalWaveGate, writeFinalWaveGate } from "./final-wave-gate-store"
 import { handleCompletedBoulderIdle } from "./idle-completion-nudge"
 import { handleAtlasSessionIdle } from "./idle-event"
 import type { SessionState } from "./types"
@@ -439,6 +440,202 @@ describe("handleAtlasSessionIdle completion nudge", () => {
     // then
     const sessionState = getState(SESSION_ID)
     expect(promptAsyncMock).not.toHaveBeenCalled()
+    expect(sessionState.pendingRetryTimer).toBeDefined()
+    if (sessionState.pendingRetryTimer) {
+      clearTimeout(sessionState.pendingRetryTimer)
+      sessionState.pendingRetryTimer = undefined
+    }
+  })
+})
+
+describe("handleAtlasSessionIdle final-wave gate", () => {
+  const SESSION_ID = "session-final-wave-1"
+  const FINAL_WAVE_PLAN = "## TODOs\n- [x] 1. Implement feature\n\n## Final Verification Wave\n- [ ] F1. Verify everything\n"
+
+  let testDirectory = ""
+
+  beforeEach(() => {
+    testDirectory = join(tmpdir(), `atlas-idle-final-wave-${randomUUID()}`)
+    if (!existsSync(testDirectory)) {
+      mkdirSync(testDirectory, { recursive: true })
+    }
+    _resetForTesting()
+    registerAgentName("atlas")
+  })
+
+  afterEach(() => {
+    if (existsSync(testDirectory)) {
+      rmSync(testDirectory, { recursive: true, force: true })
+    }
+    _resetForTesting()
+    releaseAllPromptAsyncReservationsForTesting()
+  })
+
+  function makeGetState(): { getState: (sessionId: string) => SessionState; states: Map<string, SessionState> } {
+    const states = new Map<string, SessionState>()
+    const getState = (sessionId: string): SessionState => {
+      let state = states.get(sessionId)
+      if (!state) {
+        state = { promptFailureCount: 0 }
+        states.set(sessionId, state)
+      }
+      return state
+    }
+    return { getState, states }
+  }
+
+  function pendingBackgroundManager(): NonNullable<Parameters<typeof handleAtlasSessionIdle>[0]["options"]>["backgroundManager"] {
+    return unsafeTestValue<NonNullable<Parameters<typeof handleAtlasSessionIdle>[0]["options"]>["backgroundManager"]>({
+      getTasksByParentSession: () => [{ status: "pending" }],
+    })
+  }
+
+  it("#given a durable final-wave gate awaiting approval #when the session idles repeatedly #then no continuation is injected and the mirror flag stays true", async () => {
+    // given
+    const planPath = join(testDirectory, "plan.md")
+    writeFileSync(planPath, FINAL_WAVE_PLAN)
+
+    const boulder = createBoulderState(planPath, SESSION_ID, "atlas")
+    const workId = boulder.active_work_id
+    if (!workId) {
+      throw new Error("Expected active_work_id")
+    }
+    const planName = boulder.works?.[workId]?.plan_name
+    if (!planName) {
+      throw new Error("Expected work plan_name")
+    }
+    writeBoulderState(testDirectory, boulder)
+
+    writeFinalWaveGate(testDirectory, {
+      work_id: workId,
+      plan_name: planName,
+      approved_count: 0,
+      pending_count: 1,
+      updated_at: new Date().toISOString(),
+    })
+
+    const promptAsyncMock = mock(async () => ({ data: {} }))
+    const ctx = unsafeTestValue<PluginInput>({
+      directory: testDirectory,
+      client: {
+        session: {
+          promptAsync: promptAsyncMock,
+          messages: async () => ({ data: [] }),
+        },
+      },
+    })
+    const { getState } = makeGetState()
+
+    // when
+    await handleAtlasSessionIdle({ ctx, sessionID: SESSION_ID, getState })
+    await handleAtlasSessionIdle({ ctx, sessionID: SESSION_ID, getState })
+
+    // then
+    expect(promptAsyncMock).not.toHaveBeenCalled()
+    expect(getState(SESSION_ID).waitingForFinalWaveApproval).toBe(true)
+    expect(readFinalWaveGate(testDirectory, workId)).not.toBeNull()
+  })
+
+  it("#given no durable final-wave gate #when the session idles #then continuation proceeds past the gate", async () => {
+    // given
+    const planPath = join(testDirectory, "plan.md")
+    writeFileSync(planPath, "## TODOs\n- [ ] 1. Implement feature\n")
+
+    const boulder = createBoulderState(planPath, SESSION_ID, "atlas")
+    const workId = boulder.active_work_id
+    if (!workId) {
+      throw new Error("Expected active_work_id")
+    }
+    writeBoulderState(testDirectory, boulder)
+    expect(readFinalWaveGate(testDirectory, workId)).toBeNull()
+
+    const promptAsyncMock = mock(async () => ({ data: {} }))
+    const ctx = unsafeTestValue<PluginInput>({
+      directory: testDirectory,
+      client: {
+        session: {
+          promptAsync: promptAsyncMock,
+          messages: async () => ({ data: [] }),
+        },
+      },
+    })
+    const { getState } = makeGetState()
+
+    // when
+    await handleAtlasSessionIdle({
+      ctx,
+      sessionID: SESSION_ID,
+      getState,
+      options: {
+        directory: testDirectory,
+        backgroundManager: pendingBackgroundManager(),
+      },
+    })
+
+    // then: reached the background-task gate, proving the final-wave gate did not block
+    const sessionState = getState(SESSION_ID)
+    expect(promptAsyncMock).not.toHaveBeenCalled()
+    expect(sessionState.waitingForFinalWaveApproval).toBe(false)
+    expect(sessionState.pendingRetryTimer).toBeDefined()
+    if (sessionState.pendingRetryTimer) {
+      clearTimeout(sessionState.pendingRetryTimer)
+      sessionState.pendingRetryTimer = undefined
+    }
+  })
+
+  it("#given a stale gate after implementation was reopened #when the session idles #then the gate is cleared and continuation proceeds", async () => {
+    // given
+    const planPath = join(testDirectory, "plan.md")
+    writeFileSync(planPath, "## TODOs\n- [ ] 1. Implement feature\n\n## Final Verification Wave\n- [ ] F1. Verify everything\n")
+
+    const boulder = createBoulderState(planPath, SESSION_ID, "atlas")
+    const workId = boulder.active_work_id
+    if (!workId) {
+      throw new Error("Expected active_work_id")
+    }
+    const planName = boulder.works?.[workId]?.plan_name
+    if (!planName) {
+      throw new Error("Expected work plan_name")
+    }
+    writeBoulderState(testDirectory, boulder)
+
+    writeFinalWaveGate(testDirectory, {
+      work_id: workId,
+      plan_name: planName,
+      approved_count: 0,
+      pending_count: 1,
+      updated_at: new Date().toISOString(),
+    })
+    expect(readFinalWaveGate(testDirectory, workId)).not.toBeNull()
+
+    const promptAsyncMock = mock(async () => ({ data: {} }))
+    const ctx = unsafeTestValue<PluginInput>({
+      directory: testDirectory,
+      client: {
+        session: {
+          promptAsync: promptAsyncMock,
+          messages: async () => ({ data: [] }),
+        },
+      },
+    })
+    const { getState } = makeGetState()
+
+    // when
+    await handleAtlasSessionIdle({
+      ctx,
+      sessionID: SESSION_ID,
+      getState,
+      options: {
+        directory: testDirectory,
+        backgroundManager: pendingBackgroundManager(),
+      },
+    })
+
+    // then
+    const sessionState = getState(SESSION_ID)
+    expect(readFinalWaveGate(testDirectory, workId)).toBeNull()
+    expect(promptAsyncMock).not.toHaveBeenCalled()
+    expect(sessionState.waitingForFinalWaveApproval).toBe(false)
     expect(sessionState.pendingRetryTimer).toBeDefined()
     if (sessionState.pendingRetryTimer) {
       clearTimeout(sessionState.pendingRetryTimer)

@@ -46,8 +46,6 @@ export interface SessionState {
   lastFailureAt?: number
   pendingRetryTimer?: ReturnType<typeof setTimeout>
   waitingForFinalWaveApproval?: boolean
-  pendingFinalWaveTaskCount?: number
-  approvedFinalWaveTaskCount?: number
   boulderCompletionNudgedAt?: Record<string, number>
   awaitingToolProgressAfterContinuation?: boolean
   iterationsSinceLastToolProgress?: number

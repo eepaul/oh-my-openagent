@@ -7,7 +7,10 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk"
 import type { BoulderState } from "../../features/boulder-state"
 import { clearBoulderState, writeBoulderState } from "../../features/boulder-state"
+import { shouldPauseForFinalWaveApproval } from "./final-wave-approval-gate"
+import { readFinalWaveGate } from "./final-wave-gate-store"
 import { createAtlasHook } from "./index"
+import type { SessionState } from "./types"
 
 type AtlasHookContext = Parameters<typeof createAtlasHook>[0]
 type PromptMock = ReturnType<typeof mock>
@@ -59,6 +62,7 @@ describe("Atlas final verification approval gate", () => {
       worktree: testDirectory,
       serverUrl: new URL("http://localhost"),
       $: {} as AtlasHookContext["$"],
+      experimental_workspace: { register: () => {} },
       client,
       _promptMock: promptMock,
     }
@@ -182,5 +186,131 @@ session_id: ses_feature_task
     expect(toolOutput.output).toContain("STEP 8: PROCEED TO NEXT TASK")
     expect(toolOutput.output).not.toContain("FINAL WAVE APPROVAL GATE")
 
+  })
+})
+
+describe("shouldPauseForFinalWaveApproval durable accumulator", () => {
+  let gateDirectory = ""
+
+  function makeSessionState(): SessionState {
+    return { promptFailureCount: 0 }
+  }
+
+  function approve(workId: string, planName: string, pendingCount: number): boolean {
+    return shouldPauseForFinalWaveApproval({
+      directory: gateDirectory,
+      workId,
+      planName,
+      pendingCount,
+      taskOutput: "Tasks [compliant] | Unaccounted [CLEAN] | VERDICT: APPROVE",
+      sessionState: makeSessionState(),
+    })
+  }
+
+  beforeEach(() => {
+    gateDirectory = join(tmpdir(), `atlas-final-wave-gate-${randomUUID()}`)
+    mkdirSync(gateDirectory, { recursive: true })
+  })
+
+  afterEach(() => {
+    if (existsSync(gateDirectory)) {
+      rmSync(gateDirectory, { recursive: true, force: true })
+    }
+  })
+
+  test("accumulates approvals durably across N reviewers and pauses only on the last one", () => {
+    // given
+    const workId = "work-accumulate"
+    const planName = "accumulate-plan"
+    const pendingCount = 4
+
+    // when
+    const pausedPerReviewer = [
+      approve(workId, planName, pendingCount),
+      approve(workId, planName, pendingCount),
+      approve(workId, planName, pendingCount),
+      approve(workId, planName, pendingCount),
+    ]
+
+    // then
+    expect(pausedPerReviewer).toEqual([false, false, false, true])
+    const gate = readFinalWaveGate(gateDirectory, workId)
+    expect(gate?.approved_count).toBe(4)
+    expect(gate?.pending_count).toBe(4)
+    expect(gate?.plan_name).toBe(planName)
+  })
+
+  test("pauses immediately and writes the gate when a single final-wave task remains", () => {
+    // given
+    const workId = "work-single"
+
+    // when
+    const paused = approve(workId, "single-plan", 1)
+
+    // then
+    expect(paused).toBe(true)
+    const gate = readFinalWaveGate(gateDirectory, workId)
+    expect(gate?.approved_count).toBe(1)
+    expect(gate?.pending_count).toBe(1)
+  })
+
+  test("does not increment the durable count for a non-approving completion", () => {
+    // given
+    const workId = "work-non-approve"
+    const planName = "non-approve-plan"
+    approve(workId, planName, 4)
+    approve(workId, planName, 4)
+
+    // when
+    const paused = shouldPauseForFinalWaveApproval({
+      directory: gateDirectory,
+      workId,
+      planName,
+      pendingCount: 4,
+      taskOutput: "Findings remain unresolved | VERDICT: REVISE",
+      sessionState: makeSessionState(),
+    })
+
+    // then
+    expect(paused).toBe(false)
+    const gate = readFinalWaveGate(gateDirectory, workId)
+    expect(gate?.approved_count).toBe(2)
+  })
+
+  test("does not pause or write a gate when no final-wave tasks are pending (implementation incomplete or wave done)", () => {
+    // given
+    const workId = "work-impl-pending"
+
+    // when
+    const paused = shouldPauseForFinalWaveApproval({
+      directory: gateDirectory,
+      workId,
+      planName: "impl-pending-plan",
+      pendingCount: 0,
+      taskOutput: "Tasks [compliant] | VERDICT: APPROVE",
+      sessionState: makeSessionState(),
+    })
+
+    // then
+    expect(paused).toBe(false)
+    expect(readFinalWaveGate(gateDirectory, workId)).toBeNull()
+  })
+
+  test("resets the durable count to one when the pending-count batch changes", () => {
+    // given
+    const workId = "work-reset"
+    const planName = "reset-plan"
+    approve(workId, planName, 4)
+    approve(workId, planName, 4)
+    approve(workId, planName, 4)
+
+    // when
+    const paused = approve(workId, planName, 2)
+
+    // then
+    expect(paused).toBe(false)
+    const gate = readFinalWaveGate(gateDirectory, workId)
+    expect(gate?.approved_count).toBe(1)
+    expect(gate?.pending_count).toBe(2)
   })
 })

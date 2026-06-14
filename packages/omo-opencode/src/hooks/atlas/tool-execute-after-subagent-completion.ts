@@ -14,6 +14,7 @@ import { collectGitDiffStats, formatFileChanges } from "../../shared/git-worktre
 import { log } from "../../shared/logger"
 import { syncBackgroundLaunchSessionTracking } from "./background-launch-session-tracking"
 import { shouldPauseForFinalWaveApproval } from "./final-wave-approval-gate"
+import { readFinalWavePlanState } from "./final-wave-plan-state"
 import { HOOK_NAME } from "./hook-name"
 import { extractSessionIdFromOutput, validateSubagentSessionId } from "./subagent-session-id"
 import { resolvePreferredSessionId, resolveTaskContext } from "./task-context"
@@ -176,9 +177,18 @@ export async function handleSubagentCompletionAfter(input: {
   )
 
   const originalResponse = toolOutput.output
-  const shouldPauseForApproval = sessionState
+  const finalWavePlanState = readFinalWavePlanState(planPath)
+  const pendingFinalWaveTaskCount =
+    finalWavePlanState !== null && finalWavePlanState.pendingImplementationTaskCount === 0
+      ? finalWavePlanState.pendingFinalWaveTaskCount
+      : 0
+  const finalWaveWorkId = sessionWork?.work_id
+  const shouldPauseForApproval = sessionState && finalWaveWorkId
     ? shouldPauseForFinalWaveApproval({
-        planPath,
+        directory: ctx.directory,
+        workId: finalWaveWorkId,
+        planName: workScopedBoulderState.plan_name,
+        pendingCount: pendingFinalWaveTaskCount,
         taskOutput: originalResponse,
         sessionState,
       })

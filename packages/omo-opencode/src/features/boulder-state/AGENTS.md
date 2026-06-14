@@ -34,7 +34,7 @@ interface BoulderState {
 | File | Purpose |
 |------|---------|
 | `types.ts` | `BoulderState`, `BoulderWorkState`, `TaskSessionState`, status enums |
-| `storage.ts` | Atomic CRUD on `.omo/boulder.json`. Writes via temp file + rename; file lock per work_id |
+| `storage.ts` | Re-exports from `@oh-my-opencode/boulder-state`. CRUD on `.omo/boulder.json` |
 | `constants.ts` | Path resolution + schema version constant |
 | `top-level-task.ts` | Helpers to identify the current top-level plan task and resolve its reusable subagent session |
 | `format-duration.ts` | `formatDurationHuman(ms)` — "1h 23m 5s" formatting for boulder duration |
@@ -70,7 +70,7 @@ session.completed
 <worktree-root>/.omo/boulder.json   # gitignored; one file per worktree
 ```
 
-Atomic writes: temp file → fsync (where supported) → rename. File lock prevents concurrent corruption. Schema migrations between versions handled inline in `storage.ts`.
+Writes via `writeFileSync` (see `packages/boulder-state/src/storage/write-state.ts:45`). Schema migrations between versions handled inline in `storage.ts`.
 
 ## NOTES
 

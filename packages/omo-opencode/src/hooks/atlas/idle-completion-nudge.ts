@@ -15,6 +15,7 @@ import { log } from "../../shared/logger"
 import { isAmbiguousPostDispatchPromptFailure } from "../../shared/prompt-failure-classifier"
 import { dispatchInternalPrompt, isInternalPromptDispatchAccepted } from "../shared/prompt-async-gate"
 import { shouldPromptAfterSessionIdle } from "../shared/session-idle-settle"
+import { clearFinalWaveGate } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { BOULDER_COMPLETE_PROMPT } from "./system-reminder-templates"
 import type { AtlasHookOptions, SessionState } from "./types"
@@ -49,6 +50,7 @@ export async function handleCompletedBoulderIdle(input: {
 
   if (work) {
     completeBoulder(ctx.directory, work.work_id)
+    clearFinalWaveGate(ctx.directory, work.work_id)
   } else {
     completeBoulder(ctx.directory, boulderState.active_work_id)
   }
