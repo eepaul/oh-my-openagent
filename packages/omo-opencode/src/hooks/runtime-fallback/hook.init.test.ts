@@ -12,6 +12,7 @@ const createAutoRetryHelpersMock = mock((_deps: HookDeps) => {
     abortSessionRequest: async () => {},
     clearSessionFallbackTimeout: () => {},
     scheduleSessionFallbackTimeout: () => {},
+    refreshSessionFallbackTimeout: () => {},
     autoRetryWithFallback: async () => {},
     resolveAgentForSessionFromContext: async () => undefined,
     cleanupStaleSessions: () => {},

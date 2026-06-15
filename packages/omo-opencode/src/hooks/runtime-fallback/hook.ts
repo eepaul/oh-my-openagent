@@ -82,7 +82,11 @@ export function createRuntimeFallbackHook(
     ensureInterval()
 
     if (config.enabled) {
-      observeEventForWatchdog(event, firstPromptWatchdog)
+      observeEventForWatchdog(event, firstPromptWatchdog, (sessionID) => {
+        if (deps.sessionAwaitingFallbackResult.has(sessionID)) {
+          helpers.refreshSessionFallbackTimeout(sessionID)
+        }
+      })
     }
 
     if (event.type === "message.updated") {

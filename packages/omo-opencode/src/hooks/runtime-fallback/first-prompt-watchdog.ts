@@ -59,13 +59,17 @@ function hasAssistantCompletionMarker(info: Record<string, unknown>): boolean {
 export function observeEventForWatchdog(
   event: { type: string; properties?: unknown },
   watchdog: FirstPromptWatchdog,
+  onAssistantActivity?: (sessionID: string) => void,
 ): void {
   const props = isRecord(event.properties) ? event.properties : undefined
   if (!props) return
 
   if (event.type.startsWith(SESSION_NEXT_EVENT_PREFIX)) {
     const sessionID = resolveSessionEventID(props) ?? resolveMessageEventSessionID(props)
-    if (sessionID) watchdog.onAssistantProgress(sessionID)
+    if (sessionID) {
+      watchdog.onAssistantProgress(sessionID)
+      onAssistantActivity?.(sessionID)
+    }
     return
   }
 
@@ -78,6 +82,7 @@ export function observeEventForWatchdog(
     const hasNonEmptySessionPart = typeof part?.sessionID === "string" && Object.keys(part).length > 0
     if (sessionID && (hasPartType || hasTopLevelType || hasTextDelta || hasNonEmptySessionPart)) {
       watchdog.onAssistantProgress(sessionID)
+      onAssistantActivity?.(sessionID)
     }
     return
   }
@@ -105,6 +110,9 @@ export function observeEventForWatchdog(
       const hasAnyPart = parts.some((part) => isRecord(part) && typeof part.type === "string")
       if (hasError || hasFinish || hasAnyPart) {
         watchdog.onAssistantProgress(sessionID)
+      }
+      if (!hasError && (hasFinish || hasAnyPart)) {
+        onAssistantActivity?.(sessionID)
       }
     }
     return

@@ -53,6 +53,7 @@ function createHelpers(deps: HookDeps, abortCalls: string[], clearCalls: string[
       deps.sessionFallbackTimeouts.delete(sessionID)
     },
     scheduleSessionFallbackTimeout: () => {},
+    refreshSessionFallbackTimeout: () => {},
     autoRetryWithFallback: async () => {},
     resolveAgentForSessionFromContext: async () => undefined,
     cleanupStaleSessions: () => {},

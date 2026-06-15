@@ -54,6 +54,7 @@ function createHelpers(abortCalls: Array<{ sessionID: string; source: string }>)
     },
     clearSessionFallbackTimeout: () => {},
     scheduleSessionFallbackTimeout: () => {},
+    refreshSessionFallbackTimeout: () => {},
     autoRetryWithFallback: async () => {},
     resolveAgentForSessionFromContext: async () => undefined,
     cleanupStaleSessions: () => {},

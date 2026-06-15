@@ -27,12 +27,15 @@ export function createFallbackTimeoutHelpers(
     pluginConfig,
   } = deps
 
+  const timeoutAgents = new Map<string, string | undefined>()
+
   const clearSessionFallbackTimeout = (sessionID: string) => {
     const timer = sessionFallbackTimeouts.get(sessionID)
     if (timer) {
       clearTimeout(timer)
       sessionFallbackTimeouts.delete(sessionID)
     }
+    timeoutAgents.delete(sessionID)
   }
 
   const scheduleSessionFallbackTimeout = (sessionID: string, resolvedAgent?: string) => {
@@ -40,6 +43,7 @@ export function createFallbackTimeoutHelpers(
 
     const timeoutMs = options?.session_timeout_ms ?? config.timeout_seconds * 1000
     if (timeoutMs <= 0) return
+    timeoutAgents.set(sessionID, resolvedAgent)
     const wasSubagentSession = subagentSessions.has(sessionID)
 
     const timer = setTimeout(async () => {
@@ -83,8 +87,15 @@ export function createFallbackTimeoutHelpers(
     sessionFallbackTimeouts.set(sessionID, timer)
   }
 
+  const refreshSessionFallbackTimeout = (sessionID: string) => {
+    if (!sessionFallbackTimeouts.has(sessionID)) return
+    const resolvedAgent = timeoutAgents.get(sessionID)
+    scheduleSessionFallbackTimeout(sessionID, resolvedAgent)
+  }
+
   return {
     clearSessionFallbackTimeout,
     scheduleSessionFallbackTimeout,
+    refreshSessionFallbackTimeout,
   }
 }
