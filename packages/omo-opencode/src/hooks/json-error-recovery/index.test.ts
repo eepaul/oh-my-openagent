@@ -1,3 +1,4 @@
+/// <reference types="bun-types/test" />
 import { beforeEach, describe, expect, it } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
 
@@ -57,6 +58,31 @@ describe("createJsonErrorRecoveryHook", () => {
 
       // then
       expect(output.output).toContain(JSON_ERROR_REMINDER)
+    })
+
+    it("names unescaped double quotes as common JSON parse cause", () => {
+      // given
+      const reminder = JSON_ERROR_REMINDER
+
+      // when
+      const hasQuoteGuidance = reminder.includes("unescaped double quotes inside string values")
+
+      // then
+      expect(hasQuoteGuidance).toBe(true)
+      expect(reminder).toContain("If a string contains a quoted phrase")
+    })
+
+    it("appends quote guidance for unrecognized token errors from unescaped quoted prose", async () => {
+      // given
+      const input = createInput("question")
+      const output = createOutput("JSON Parse error: Unrecognized token '仅'")
+
+      // when
+      await hook["tool.execute.after"](input, output)
+
+      // then
+      expect(output.output).toContain("unescaped double quotes inside string values")
+      expect(output.output).toContain("If a string contains a quoted phrase")
     })
 
     it("appends reminder when output includes SyntaxError", async () => {
