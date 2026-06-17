@@ -38,6 +38,43 @@ describe("findRecentSessionPlanPath", () => {
     expect(result).toBe(planPath)
   })
 
+  test("#given opencode-prefixed session id #when finding recent plan #then sdk receives raw session id", async () => {
+    // given
+    const directory = join(tmpdir(), "session-plan-affinity-test")
+    const planPath = join(directory, ".omo", "plans", "foo-bar.md")
+    const requestedSessionIds: string[] = []
+    const client = unsafeTestValue<FindRecentSessionPlanPathInput["client"]>({
+      session: {
+        messages: async (request: { path: { id: string } }) => {
+          requestedSessionIds.push(request.path.id)
+          return {
+            data: [
+              {
+                parts: [
+                  {
+                    text: "Plan saved to .omo/plans/foo-bar.md",
+                  },
+                ],
+              },
+            ],
+          }
+        },
+      },
+    })
+
+    // when
+    const result = await findRecentSessionPlanPath({
+      client,
+      directory,
+      sessionID: "opencode:ses_123",
+      availablePlans: [planPath],
+    })
+
+    // then
+    expect(result).toBe(planPath)
+    expect(requestedSessionIds).toEqual(["ses_123"])
+  })
+
   test("#given session history references Windows short home path #when finding recent plan #then returns matching plan", async () => {
     // given
     const directory = "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\session-plan-affinity-test"

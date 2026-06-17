@@ -78,6 +78,10 @@ function extractPlanPathsFromInput(directory: string, input: Record<string, unkn
   return [...new Set([...nestedCandidates, ...directCandidates])]
 }
 
+function toOpenCodeSessionPathId(sessionID: string): string {
+  return sessionID.startsWith("opencode:") ? sessionID.slice("opencode:".length) : sessionID
+}
+
 export async function findRecentSessionPlanPath(input: {
   client: PluginInput["client"]
   directory: string
@@ -96,7 +100,7 @@ export async function findRecentSessionPlanPath(input: {
   }
 
   try {
-    const response = await input.client.session.messages({ path: { id: input.sessionID } })
+    const response = await input.client.session.messages({ path: { id: toOpenCodeSessionPathId(input.sessionID) } })
     const messages = normalizeSDKResponse(response, [] as SessionMessage[])
 
     for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
