@@ -7,7 +7,7 @@ Use /handoff when:
 - You want to start fresh while preserving essential context from this session
 - The context window is approaching capacity
 
-This creates a detailed context summary that can be used to continue work in a new session.
+This creates a detailed context summary that can be used to continue work in a new session. By default the summary is also saved to disk under prompts/handoff/ so it survives this session and can be reused later.
 
 ---
 
@@ -161,17 +161,51 @@ Rules for the summary:
 
 ---
 
-# PHASE 4: PROVIDE INSTRUCTIONS
+# PHASE 4: SAVE HANDOFF TO FILE (DEFAULT)
 
-After generating the summary, instruct the user:
+By default, persist the handoff summary to disk so it survives this session and can be reused later. Do this after the HANDOFF CONTEXT block is fully written in PHASE 3.
+
+1. Build a filesystem-safe timestamp:
+   - Start from the Timestamp value in the <session-context> block above (ISO 8601, e.g. 2026-06-22T15:30:45.123Z).
+   - Convert it to the compact form YYYYMMDD-HHMMSS by dropping the milliseconds and timezone and removing the "-", ":" and "T" separators. Example: 2026-06-22T15:30:45.123Z becomes 20260622-153045.
+   - If that value is missing or is still the literal "$TIMESTAMP", run Bash({ command: "date -u +%Y%m%d-%H%M%S" }) and use its output instead.
+
+2. Build a short kebab-case slug that represents the summary, derived from the GOAL line:
+   - Lowercase ASCII only, words joined by single hyphens.
+   - Keep it to roughly 3-6 words, just enough to recognize the handoff at a glance.
+   - Remove any character that is not a-z, 0-9 or hyphen; collapse repeated hyphens; trim leading and trailing hyphens.
+   - Example GOAL "Finish wiring JWT auth into the API routes" becomes "finish-wiring-jwt-auth".
+   - If the GOAL is empty, derive the slug from the primary user request topic instead.
+
+3. Compose the default, workspace-relative path:
+   prompts/handoff/<timestamp>-<slug>.md
+   Example: prompts/handoff/20260622-153045-finish-wiring-jwt-auth.md
+
+4. Write the file with the Write tool:
+   - The Write tool creates missing parent directories, so writing to the full path also creates prompts/handoff/ when needed.
+   - The file content is the exact HANDOFF CONTEXT block from PHASE 3, verbatim and unchanged (plain text, no surrounding markdown fences).
+
+5. After writing, tell the user the exact path you saved to.
+
+Notes:
+- The timestamp plus slug makes the filename effectively unique. Do NOT overwrite an existing handoff file; if the target path somehow already exists, append a short numeric suffix such as "-2" before ".md".
+- prompts/handoff/ is the default location. If the user explicitly asked for a different path in their request, honor that instead.
+
+---
+
+# PHASE 5: PROVIDE INSTRUCTIONS
+
+After generating and saving the summary, instruct the user (replace <saved-path> with the path you actually wrote):
 
 \`\`\`
 ---
 
+Saved handoff to: <saved-path>
+
 TO CONTINUE IN A NEW SESSION:
 
 1. Press 'n' in OpenCode TUI to open a new session, or run 'opencode' in a new terminal
-2. Paste the HANDOFF CONTEXT above as your first message
+2. Paste the HANDOFF CONTEXT above (or read it back from the saved file) as your first message
 3. Add your request: "Continue from the handoff context above. [Your next task]"
 
 The new session will have all context needed to continue seamlessly.
@@ -187,10 +221,13 @@ The new session will have all context needed to continue seamlessly.
 - DO NOT include sensitive information (API keys, credentials, secrets)
 - DO NOT exceed 10 files in the KEY FILES section
 - DO keep the GOAL section to a single sentence or short paragraph
+- DO save the handoff by default to prompts/handoff/<timestamp>-<slug>.md (filesystem-safe timestamp + kebab-case slug)
+- DO write the saved file content as the verbatim HANDOFF CONTEXT block, with no extra markdown wrapping
+- DO NOT overwrite an existing handoff file
 
 ---
 
 # EXECUTE NOW
 
-Begin by gathering programmatic context, then synthesize the handoff summary.
+Begin by gathering programmatic context, synthesize the handoff summary, then save it to prompts/handoff/ and tell the user the exact saved path.
 `
