@@ -1,23 +1,23 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test"
-import type { OhMyOpenCodeConfig } from "../../config"
-import type { AutoCompactState, ParsedTokenLimitError, RetryState, TruncateState } from "./types"
+import type { OhMyOpenCodeConfig } from "../../../config"
+import type { AutoCompactState, ParsedTokenLimitError, RetryState, TruncateState } from "../types"
 
 const resolveToolOutputsMock = mock(() => Promise.resolve(new Map<string, { output: string; status: string } | null>()))
 const runSummarizeRetryStrategyMock = mock(() => Promise.resolve())
 
-mock.module("./tool-result-resolver", () => ({
+mock.module("../tool-result-resolver", () => ({
   resolveToolOutputs: resolveToolOutputsMock,
 }))
 
-mock.module("./summarize-retry-strategy", () => ({
+mock.module("../summarize-retry-strategy", () => ({
   runSummarizeRetryStrategy: runSummarizeRetryStrategyMock,
 }))
 
-mock.module("../../shared/logger", () => ({
+mock.module("../../../shared/logger", () => ({
   log: () => {},
 }))
 
-const strategyModulePromise = import("./tool-pair-repair-strategy")
+const strategyModulePromise = import("../tool-pair-repair-strategy")
 
 afterAll(() => {
   mock.restore()
@@ -147,7 +147,7 @@ describe("runToolPairRepairStrategy", () => {
       autoCompactState,
       client: client as never,
       directory,
-      pluginConfig: {} as OhMyOpenCodeConfig,
+      pluginConfig: {},
     })
 
     // then
