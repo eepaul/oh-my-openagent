@@ -1,4 +1,4 @@
-import type { ParsedTokenLimitError } from "./types"
+import { type ParsedTokenLimitError, TOOL_PAIR_MISMATCH } from "./types"
 
 interface AnthropicErrorData {
   type?: "error"
@@ -27,6 +27,10 @@ const TOKEN_LIMIT_KEYWORDS = [
   "too many tokens",
   "non-empty content",
 ]
+
+// All keywords must be present (case-insensitive) for an Anthropic 400 where
+// `tool_use` blocks were sent without a following `tool_result` block.
+const TOOL_PAIR_MISMATCH_KEYWORDS = ["tool_use", "without", "tool_result", "immediately after"]
 
 // Patterns that indicate thinking block structure errors (NOT token limit errors);
 // compaction must not react to them
@@ -105,6 +109,23 @@ function isTokenLimitError(text: string): boolean {
   }
   const lower = text.toLowerCase()
   return TOKEN_LIMIT_KEYWORDS.some((kw) => lower.includes(kw))
+}
+
+function isToolPairMismatchError(text: string): boolean {
+  const lower = text.toLowerCase()
+  return TOOL_PAIR_MISMATCH_KEYWORDS.every((kw) => lower.includes(kw))
+}
+
+const TOOL_USE_ID_PATTERN = /toolu_[A-Za-z0-9]+/g
+const IMMEDIATELY_AFTER_MARKER = /immediately after:?\s*/i
+
+function extractToolUseIDs(text: string): string[] {
+  const marker = text.match(IMMEDIATELY_AFTER_MARKER)
+  if (marker?.index === undefined) {
+    return []
+  }
+  const afterMarker = text.slice(marker.index + marker[0].length)
+  return afterMarker.match(TOOL_USE_ID_PATTERN) ?? []
 }
 
 function stringifyErrorObject(errObj: Record<string, unknown>): string | null {
@@ -264,4 +285,64 @@ export function parseAnthropicTokenLimitError(err: unknown): ParsedTokenLimitErr
   }
 
   return null
+}
+
+function buildToolPairMismatchResult(text: string): ParsedTokenLimitError | null {
+  if (!isToolPairMismatchError(text)) {
+    return null
+  }
+  return {
+    currentTokens: 0,
+    maxTokens: 0,
+    errorType: TOOL_PAIR_MISMATCH,
+    messageIndex: extractMessageIndex(text),
+    toolUseIDs: extractToolUseIDs(text),
+  }
+}
+
+export function parseToolPairMismatchError(err: unknown): ParsedTokenLimitError | null {
+  if (typeof err === "string") {
+    return buildToolPairMismatchResult(err)
+  }
+
+  if (!isRecord(err)) return null
+
+  const errObj = err
+
+  const data = readProperty(errObj, "data")
+  const dataObj = isRecord(data) ? data : undefined
+  const responseBody = dataObj ? readProperty(dataObj, "responseBody") : undefined
+  const errorMessage = readStringProperty(errObj, "message")
+  const errorValue = readProperty(errObj, "error")
+  const errorData = isRecord(errorValue) ? errorValue : undefined
+  const nestedErrorValue = errorData ? readProperty(errorData, "error") : undefined
+  const nestedError = isRecord(nestedErrorValue) ? nestedErrorValue : undefined
+
+  const textSources: string[] = []
+
+  if (typeof responseBody === "string") textSources.push(responseBody)
+  if (typeof errorMessage === "string") textSources.push(errorMessage)
+  const errorDataMessage = errorData ? readStringProperty(errorData, "message") : undefined
+  if (errorDataMessage !== undefined) textSources.push(errorDataMessage)
+  const body = readStringProperty(errObj, "body")
+  if (body !== undefined) textSources.push(body)
+  const details = readStringProperty(errObj, "details")
+  if (details !== undefined) textSources.push(details)
+  const reason = readStringProperty(errObj, "reason")
+  if (reason !== undefined) textSources.push(reason)
+  const description = readStringProperty(errObj, "description")
+  if (description !== undefined) textSources.push(description)
+  const nestedErrorMessage = nestedError ? readStringProperty(nestedError, "message") : undefined
+  if (nestedErrorMessage !== undefined) textSources.push(nestedErrorMessage)
+  const dataMessage = dataObj ? readStringProperty(dataObj, "message") : undefined
+  if (dataMessage !== undefined) textSources.push(dataMessage)
+  const dataError = dataObj ? readStringProperty(dataObj, "error") : undefined
+  if (dataError !== undefined) textSources.push(dataError)
+
+  if (textSources.length === 0) {
+    const jsonStr = stringifyErrorObject(errObj)
+    if (jsonStr !== null) textSources.push(jsonStr)
+  }
+
+  return buildToolPairMismatchResult(textSources.join(" "))
 }

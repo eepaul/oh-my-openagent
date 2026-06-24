@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 import { describe, expect, it } from "bun:test"
-import { parseAnthropicTokenLimitError } from "./parser"
+import { parseAnthropicTokenLimitError, parseToolPairMismatchError } from "./parser"
 
 describe("parseAnthropicTokenLimitError", () => {
   it("#given a standard token limit error string #when parsing #then extracts tokens", () => {
@@ -168,6 +168,85 @@ describe("parseAnthropicTokenLimitError", () => {
 
     //#when
     const result = parseAnthropicTokenLimitError(error)
+
+    //#then
+    expect(result).toBeNull()
+  })
+
+  it("#given a tool_use/tool_result 400 error #when parsing as token limit #then returns null", () => {
+    //#given
+    const error =
+      "messages.2: `tool_use` ids were found without `tool_result` blocks immediately after: toolu_01BBdTSb8SVjxJNJNoJsed3g, toolu_01GCersznQgEektoTvDY2bZS. Each `tool_use` block must have a corresponding `tool_result` block in the next message."
+
+    //#when
+    const result = parseAnthropicTokenLimitError(error)
+
+    //#then
+    expect(result).toBeNull()
+  })
+})
+
+describe("parseToolPairMismatchError", () => {
+  it("#given a real tool_use/tool_result 400 string #when parsing #then classifies as tool_pair_mismatch with index and ids", () => {
+    //#given
+    const error =
+      "messages.2: `tool_use` ids were found without `tool_result` blocks immediately after: toolu_01BBdTSb8SVjxJNJNoJsed3g, toolu_01GCersznQgEektoTvDY2bZS. Each `tool_use` block must have a corresponding `tool_result` block in the next message."
+
+    //#when
+    const result = parseToolPairMismatchError(error)
+
+    //#then
+    expect(result).not.toBeNull()
+    if (result === null) {
+      throw new Error("expected tool pair mismatch parser result")
+    }
+    expect(result.errorType).toBe("tool_pair_mismatch")
+    expect(result.messageIndex).toBe(2)
+    expect(result.toolUseIDs).toEqual(["toolu_01BBdTSb8SVjxJNJNoJsed3g", "toolu_01GCersznQgEektoTvDY2bZS"])
+    expect(result.currentTokens).toBe(0)
+    expect(result.maxTokens).toBe(0)
+  })
+
+  it("#given a token limit error string #when parsing #then returns null without token-limit regression", () => {
+    //#given
+    const error =
+      "This request is too long. Please reduce message size and try again. prompt is too long: 125000 tokens exceeds limit of 100000 tokens"
+
+    //#when
+    const result = parseToolPairMismatchError(error)
+
+    //#then
+    expect(result).toBeNull()
+  })
+
+  it("#given a thinking-block structure error #when parsing #then returns null", () => {
+    //#given
+    const error = "messages.0.content.0: Expected `thinking` or `redacted_thinking`, but found `text`"
+
+    //#when
+    const result = parseToolPairMismatchError(error)
+
+    //#then
+    expect(result).toBeNull()
+  })
+
+  it("#given null input #when parsing #then returns null", () => {
+    //#given
+    const error = null
+
+    //#when
+    const result = parseToolPairMismatchError(error)
+
+    //#then
+    expect(result).toBeNull()
+  })
+
+  it("#given a non-object primitive #when parsing #then returns null", () => {
+    //#given
+    const error = 42
+
+    //#when
+    const result = parseToolPairMismatchError(error)
 
     //#then
     expect(result).toBeNull()
