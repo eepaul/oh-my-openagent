@@ -1,4 +1,4 @@
-import type { HookDeps } from "./types"
+import type { AutoRetryDispatchOutcome, HookDeps } from "./types"
 import { HOOK_NAME } from "./constants"
 import { log } from "../../shared/logger"
 import { getSessionAgent, resolveRegisteredAgentName } from "../../features/claude-code-session-state"
@@ -32,10 +32,10 @@ export function createAutoRetryDispatcher(
     newModel: string,
     resolvedAgent: string | undefined,
     source: string,
-  ): Promise<void> => {
+  ): Promise<AutoRetryDispatchOutcome> => {
     if (sessionRetryInFlight.has(sessionID)) {
       log(`[${HOOK_NAME}] Retry already in flight, skipping (${source})`, { sessionID })
-      return
+      return { accepted: false, status: "blocked", reason: "retry already in flight" }
     }
 
     const agentSettings = resolvedAgent
@@ -54,7 +54,7 @@ export function createAutoRetryDispatcher(
       if (state) {
         state.pendingFallbackPromptMayHaveBeenAccepted = false
       }
-      return
+      return { accepted: false, status: "invalid-model", reason: "missing provider prefix" }
     }
 
     const hadAwaitingFallbackResult = sessionAwaitingFallbackResult.has(sessionID)
@@ -64,6 +64,7 @@ export function createAutoRetryDispatcher(
     let retryDispatched = false
     let retryMayHaveBeenAccepted = false
     let retryDeferredByBusySession = false
+    let acceptedStatus: AutoRetryDispatchOutcome["status"] = "dispatched"
     try {
       const messagesResp = await ctx.client.session.messages({
         path: { id: sessionID },
@@ -103,32 +104,47 @@ export function createAutoRetryDispatcher(
         scheduleSessionFallbackTimeout(sessionID, retryAgent)
       }
 
-      const promptResult = await dispatchInternalPrompt({
+      const retryPromptInput = {
+        path: { id: sessionID },
+        body: {
+          ...(launchAgent ? { agent: launchAgent } : {}),
+          ...retryModelPayload,
+          ...(retryPayload.system ? { system: retryPayload.system } : {}),
+          ...(retryPayload.tools ? { tools: retryPayload.tools } : {}),
+          ...(retryMessageID ? { messageID: retryMessageID } : {}),
+          parts: retryParts,
+        },
+        query: { directory: ctx.directory },
+      }
+      const dispatchRetryPrompt = (retrySource: string, queueBehavior?: "defer") => dispatchInternalPrompt({
         mode: "async",
         client: ctx.client,
         sessionID,
-        source: `runtime-fallback:${source}`,
+        source: retrySource,
         settleMs: options?.dispatch_settle_ms ?? 0,
-        queueBehavior: "defer",
-        // We abort the rate-limited turn before re-dispatching, so the aborted
-        // assistant message (no finish marker / no output) trips the gate's
-        // "latest assistant still active" tool-state guard as a false positive
-        // and blocks every fallback. Bypass it here; any dangling tool state is
-        // reconciled by the session-recovery tool_result_missing hook.
-        checkToolState: false,
-        input: {
-          path: { id: sessionID },
-          body: {
-            ...(launchAgent ? { agent: launchAgent } : {}),
-            ...retryModelPayload,
-            ...(retryPayload.system ? { system: retryPayload.system } : {}),
-            ...(retryPayload.tools ? { tools: retryPayload.tools } : {}),
-            ...(retryMessageID ? { messageID: retryMessageID } : {}),
-            parts: retryParts,
-          },
-          query: { directory: ctx.directory },
-        },
+        ...(queueBehavior ? { queueBehavior } : {}),
+        // We abort the rate-limited turn before re-dispatching for sources
+        // that mark internallyAbortedSessions (retry-signal / quota-fallback /
+        // session.timeout). The aborted assistant message (no finish marker /
+        // no output) trips the gate's "latest assistant still active" tool-state
+        // guard as a false positive for those sources. Bypass it ONLY when the
+        // fork itself marked this session as internally aborted; for genuinely
+        // active sessions (upstream #5109) the guard correctly queues the
+        // dispatch. Any dangling tool state is reconciled by the session-recovery
+        // tool_result_missing hook.
+        checkToolState: !deps.internallyAbortedSessions.has(sessionID),
+        input: retryPromptInput,
       })
+
+      let promptResult = await dispatchRetryPrompt(`runtime-fallback:${source}`, "defer")
+      if (promptResult.status === "active") {
+        retryDeferredByBusySession = true
+        log(`[${HOOK_NAME}] Session active, queueing fallback dispatch (${source})`, {
+          sessionID,
+        })
+        promptResult = await dispatchRetryPrompt(`runtime-fallback:${source}:active-queue`)
+        acceptedStatus = "queued"
+      }
       if (promptResult.status === "failed") {
         if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
           retryMayHaveBeenAccepted = true
@@ -136,6 +152,7 @@ export function createAutoRetryDispatcher(
             sessionID,
             error: String(promptResult.error),
           })
+          return { accepted: true, status: "possibly-accepted" }
         }
         throw promptResult.error
       }
@@ -153,27 +170,10 @@ export function createAutoRetryDispatcher(
             maxAttempts: MAX_RESERVED_RETRIES,
           })
           await new Promise((r) => setTimeout(r, delay))
-          reservedResult = await dispatchInternalPrompt({
-            mode: "async",
-            client: ctx.client,
-            sessionID,
-            source: `runtime-fallback:${source}:reserved-retry-${attempt + 1}`,
-            settleMs: options?.dispatch_settle_ms ?? 0,
-            queueBehavior: "defer",
-            checkToolState: false,
-            input: {
-              path: { id: sessionID },
-              body: {
-                ...(launchAgent ? { agent: launchAgent } : {}),
-                ...retryModelPayload,
-                ...(retryPayload.system ? { system: retryPayload.system } : {}),
-                ...(retryPayload.tools ? { tools: retryPayload.tools } : {}),
-                ...(retryMessageID ? { messageID: retryMessageID } : {}),
-                parts: retryParts,
-              },
-              query: { directory: ctx.directory },
-            },
-          })
+          reservedResult = await dispatchRetryPrompt(
+            `runtime-fallback:${source}:reserved-retry-${attempt + 1}`,
+            "defer",
+          )
           if (reservedResult.status !== "reserved") break
         }
         if (reservedResult.status === "failed") {
@@ -183,6 +183,7 @@ export function createAutoRetryDispatcher(
               sessionID,
               error: String(reservedResult.error),
             })
+            return { accepted: true, status: "possibly-accepted" }
           }
           throw reservedResult.error
         }
@@ -194,8 +195,9 @@ export function createAutoRetryDispatcher(
             status: reservedResult.status,
             willRetryViaTimeout: retryDeferredByBusySession,
           })
-          return
+          return { accepted: false, status: "blocked", reason: `prompt gate returned ${reservedResult.status}` }
         }
+        acceptedStatus = "queued"
       } else if (!isInternalPromptDispatchAccepted(promptResult)) {
         retryDeferredByBusySession = promptResult.status === "active"
         log(`[${HOOK_NAME}] Auto-retry skipped by promptAsync gate (${source})`, {
@@ -203,7 +205,7 @@ export function createAutoRetryDispatcher(
           status: promptResult.status,
           willRetryViaTimeout: retryDeferredByBusySession,
         })
-        return
+        return { accepted: false, status: "blocked", reason: `prompt gate returned ${promptResult.status}` }
       }
       sessionAwaitingFallbackResult.add(sessionID)
       if (hadAwaitingFallbackResult) {
@@ -214,12 +216,14 @@ export function createAutoRetryDispatcher(
         state.pendingFallbackPromptMayHaveBeenAccepted = false
       }
       retryDispatched = true
+      return { accepted: true, status: acceptedStatus }
     } catch (retryError) {
       if (!(retryError instanceof Error)) {
         log(`[${HOOK_NAME}] Auto-retry failed (${source})`, { sessionID, error: String(retryError) })
-        return
+        return { accepted: false, status: "failed", reason: String(retryError) }
       }
       log(`[${HOOK_NAME}] Auto-retry failed (${source})`, { sessionID, error: String(retryError) })
+      return { accepted: false, status: "failed", reason: retryError.message }
     } finally {
       sessionRetryInFlight.delete(sessionID)
       if (retryMayHaveBeenAccepted) {

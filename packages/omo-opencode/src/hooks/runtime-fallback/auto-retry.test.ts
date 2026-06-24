@@ -42,6 +42,7 @@ function createDeps(promptCalls: { count: number }): HookDeps {
       cooldown_seconds: 60,
       timeout_seconds: 0,
       notify_on_fallback: false,
+      restore_primary_after_cooldown: false,
     },
     options: undefined,
     pluginConfig: undefined,
@@ -228,13 +229,16 @@ describe("createAutoRetryHelpers", () => {
     helpers.clearSessionFallbackTimeout(sessionID)
   })
 
-  test("#given the just-aborted assistant turn would trip the gate tool-state guard #when auto retry runs #then the fallback still dispatches because runtime-fallback bypasses checkToolState", async () => {
+  test("#given the just-aborted assistant turn would trip the gate tool-state guard #when auto retry runs #then the fallback still dispatches because runtime-fallback bypasses checkToolState when internally aborted", async () => {
     // given - session status is idle, but the aborted assistant turn (no finish
     // marker, empty parts) makes latestAssistantTurnBlocksInternalPrompt report
-    // the assistant as still active (a false positive after our own abort)
+    // the assistant as still active (a false positive after our own abort).
+    // The bypass is conditional on internallyAbortedSessions (set by
+    // auto-retry-abort for retry-signal/quota-fallback/session.timeout sources).
     const promptCalls = { count: 0 }
     const deps = createDeps(promptCalls)
     const sessionID = "session-aborted-turn-blocks"
+    deps.internallyAbortedSessions.add(sessionID)
     deps.ctx.client.session.status = async () => ({ data: {} })
     deps.ctx.client.session.messages = async () => ({
       data: [
@@ -248,7 +252,7 @@ describe("createAutoRetryHelpers", () => {
     // when
     await helpers.autoRetryWithFallback(sessionID, "opencode-go/kimi-k2.6", undefined, "session.status")
 
-    // then - the tool-state guard is bypassed so the fallback actually dispatches
+    // then - the tool-state guard is bypassed (internallyAbortedSessions) so the fallback actually dispatches
     expect(promptCalls.count).toBe(1)
   })
 })

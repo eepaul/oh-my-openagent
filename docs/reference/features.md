@@ -71,6 +71,32 @@ task(subagent_type="explore", load_skills=[], prompt="Find auth implementations"
 background_output(task_id="bg_abc123")
 ```
 
+#### Background Agent Work Directories
+
+Background agents inherit the session working directory from OpenCode and OMO when
+the task tool starts them. OMO does not force the model's own shell commands to
+stay inside that directory after launch. If a model decides to clone a repo,
+download docs, or create scratch files under `/tmp` or macOS `/var/folders/...`,
+the filesystem prompt comes from that command, not from a separate OMO storage
+root.
+
+`APP_DIR` is an OpenCode process environment value. Treat it as process context,
+not as a guarantee that every background agent artifact will land there.
+
+For projects that must keep all agent scratch work under the repository, add a
+project `AGENTS.md` rule with an explicit writable path:
+
+```md
+Use ./.omo/session-work/ for clones, downloaded docs, scratch files, and
+temporary outputs. Do not write under /tmp, /var, or other OS temp directories
+unless the user approves it.
+```
+
+If you use tmux panes for background agents, each pane still follows the same
+model instructions. A project rule is more reliable than repeating the
+constraint in one prompt, because every subagent receives the rule with the
+project context.
+
 #### Visual Multi-Agent with Tmux
 
 Enable `tmux.enabled` to see background agents in separate tmux panes:
@@ -286,185 +312,6 @@ The system automatically recovers from common session failures without user inte
 - **JSON parse errors**: Recovers from malformed tool outputs
 
 Recovery happens transparently during agent execution. You see the result, not the failure.
-## Skills
-
-Skills provide specialized workflows with embedded MCP servers and detailed instructions. A Skill is a mechanism that injects **specialized knowledge (Context)** and **tools (MCP)** for specific domains into agents.
-
-### Built-in Skills
-
-| Skill              | Trigger                                                 | Description                                                                                                                                                                                                                                                                                                                                   |
-| ------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **git-master**     | commit, rebase, squash, "who wrote", "when was X added" | Git expert. Detects commit styles, splits atomic commits, formulates rebase strategies. Three specializations: Commit Architect (atomic commits, dependency ordering, style detection), Rebase Surgeon (history rewriting, conflict resolution, branch cleanup), History Archaeologist (finding when/where specific changes were introduced). |
-| **playwright**     | Browser tasks, testing, screenshots                     | Browser automation via Playwright MCP. MUST USE for browser verification, browsing, web scraping, testing, and screenshots.                                                                                                                                                                                                                   |
-| **agent-browser**  | Browser tasks on agent-browser                          | Browser automation via the `agent-browser` CLI. Covers navigation, snapshots, screenshots, network inspection, and scripted interactions.                                                                                                                                                                                                     |
-| **dev-browser**    | Stateful browser scripting                              | Browser automation with persistent page state for iterative workflows and authenticated sessions.                                                                                                                                                                                                                                             |
-| **frontend-ui-ux** | UI/UX tasks, styling                                    | Designer-turned-developer persona. Crafts stunning UI/UX even without design mockups. Emphasizes bold aesthetic direction, distinctive typography, cohesive color palettes.                                                                                                                                                                   |
-| **review-work**    | "review work", "review my work", "QA my work"         | Post-implementation review orchestrator. Launches 5 parallel background sub-agents for comprehensive review: goal verification, code quality, security, hands-on QA, and context mining. All must pass for review to pass.                                                                                                                      |
-| **$omo:remove-ai-slops**| "remove AI slop", "de-AI", "humanize"                 | Removes AI-generated code smells from files while preserving functionality. Identifies and eliminates verbose comments, redundant error handling, over-engineered patterns, and generic AI phrasing.                                                                                                                                             |
-
-#### git-master Core Principles
-
-**Multiple Commits by Default**:
-
-```
-3+ files -> MUST be 2+ commits
-5+ files -> MUST be 3+ commits
-10+ files -> MUST be 5+ commits
-```
-
-**Automatic Style Detection**:
-
-- Analyzes last 30 commits for language (Korean/English) and style (semantic/plain/short)
-- Matches your repo's commit conventions automatically
-
-**Usage**:
-
-```
-/git-master commit these changes
-/git-master rebase onto main
-/git-master who wrote this authentication code?
-```
-
-#### frontend-ui-ux Design Process
-
-- **Design Process**: Purpose, Tone, Constraints, Differentiation
-- **Aesthetic Direction**: Choose extreme - brutalist, maximalist, retro-futuristic, luxury, playful
-- **Typography**: Distinctive fonts, avoid generic (Inter, Roboto, Arial)
-- **Color**: Cohesive palettes with sharp accents, avoid purple-on-white AI slop
-- **Motion**: High-impact staggered reveals, scroll-triggering, surprising hover states
-- **Anti-Patterns**: Generic fonts, predictable layouts, cookie-cutter design
-
-### Browser Automation Options
-
-Oh-My-OpenAgent provides two browser automation providers, configurable via `browser_automation_engine.provider`.
-
-#### Option 1: Playwright MCP (Default)
-
-```yaml
-mcp:
-  playwright:
-    command: npx
-    args: ["@playwright/mcp@latest"]
-```
-
-**Usage**:
-
-```
-/playwright Navigate to example.com and take a screenshot
-```
-
-#### Option 2: Agent Browser CLI (Vercel)
-
-```json
-{
-  "browser_automation_engine": {
-    "provider": "agent-browser"
-  }
-}
-```
-
-**Requires installation**:
-
-```bash
-bun add -g agent-browser
-```
-
-**Usage**:
-
-```
-Use agent-browser to navigate to example.com and extract the main heading
-```
-
-**Capabilities (Both Providers)**:
-
-- Navigate and interact with web pages
-- Take screenshots and PDFs
-- Fill forms and click elements
-- Wait for network requests
-- Scrape content
-
-### Custom Skill Creation (SKILL.md)
-
-You can add custom skills directly to `.opencode/skills/` in your project root or `~/.claude/skills/` in your home directory.
-
-**Example: `.opencode/skills/my-skill/SKILL.md`**
-
-```markdown
----
-name: my-skill
-description: My special custom skill
-mcp:
-  my-mcp:
-    command: npx
-    args: ["-y", "my-mcp-server"]
----
-
-# My Skill Prompt
-
-This content will be injected into the agent's system prompt.
-...
-```
-
-**Skill Load Locations** (priority order, highest first):
-
-- `.opencode/skills/*/SKILL.md` (project, OpenCode native)
-- `~/.config/opencode/skills/*/SKILL.md` (user, OpenCode native)
-- `.claude/skills/*/SKILL.md` (project, Claude Code compat)
-- `.agents/skills/*/SKILL.md` (project, Agents convention)
-- `~/.agents/skills/*/SKILL.md` (user, Agents convention)
-
-Same-named skill at higher priority overrides lower.
-
-Loaded skill display priority follows this order: `project > user > opencode > builtin/plugin`.
-
-Disable built-in skills via `disabled_skills: ["playwright"]` in config.
-
-### Category + Skill Combo Strategies
-
-You can create powerful specialized agents by combining Categories and Skills.
-
-#### The Designer (UI Implementation)
-
-- **Category**: `visual-engineering`
-- **load_skills**: `["frontend-ui-ux", "playwright"]`
-- **Effect**: Implements aesthetic UI and verifies rendering results directly in browser.
-
-#### The Architect (Design Review)
-
-- **Category**: `ultrabrain`
-- **load_skills**: `[]` (pure reasoning)
-- **Effect**: Leverages GPT-5.5 xhigh reasoning for in-depth system architecture analysis.
-
-#### The Maintainer (Quick Fixes)
-
-- **Category**: `quick`
-- **load_skills**: `["git-master"]`
-- **Effect**: Uses cost-effective models to quickly fix code and generate clean commits.
-
-### task Prompt Guide
-
-When delegating, **clear and specific** prompts are essential. Include these 7 elements:
-
-1. **TASK**: What needs to be done? (single objective)
-2. **EXPECTED OUTCOME**: What is the deliverable?
-3. **REQUIRED SKILLS**: Which skills should be loaded via `load_skills`?
-4. **REQUIRED TOOLS**: Which tools must be used? (whitelist)
-5. **MUST DO**: What must be done (constraints)
-6. **MUST NOT DO**: What must never be done
-7. **CONTEXT**: File paths, existing patterns, reference materials
-
-**Bad Example**:
-
-> "Fix this"
-
-**Good Example**:
-
-> **TASK**: Fix mobile layout breaking issue in `LoginButton.tsx`
-> **CONTEXT**: `src/components/LoginButton.tsx`, using Tailwind CSS
-> **MUST DO**: Change flex-direction at `md:` breakpoint
-> **MUST NOT DO**: Modify existing desktop layout
-> **EXPECTED**: Buttons align vertically on mobile
-
 ## Commands
 
 Commands are slash-triggered workflows that execute predefined templates.
@@ -582,6 +429,188 @@ Load custom commands from:
 - `.claude/commands/*.md` (project, Claude Code compat)
 - `~/.config/opencode/commands/*.md` (user, Claude Code compat)
 
+## Skill Sets
+
+Skill sets provide specialized workflows with embedded MCP servers and detailed instructions. They are automatically activated by matching task intent, so you do not need to study or preload everything before working. When you want to force one deliberately, call it by name in the prompt, slash command, or `load_skills` list.
+
+### Built-in Skill Sets
+
+| Skill set              | Trigger                                                 | Description                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **git-master**         | commit, rebase, squash, "who wrote", "when was X added" | Git expert. Detects commit styles, splits atomic commits, formulates rebase strategies. Three specializations: Commit Architect (atomic commits, dependency ordering), Rebase Surgeon (history rewriting, conflict resolution), and History Archaeologist (finding when/where specific changes were introduced).                              |
+| **playwright**         | Browser tasks, testing, screenshots                     | Browser automation via Playwright MCP. MUST USE for browser verification, browsing, web scraping, testing, and screenshots.                                                                                                                                                                                                                   |
+| **agent-browser**      | Browser tasks on agent-browser                          | Browser automation via the `agent-browser` CLI. Covers navigation, snapshots, screenshots, network inspection, and scripted interactions.                                                                                                                                                                                                     |
+| **dev-browser**        | Stateful browser scripting                              | Browser automation with persistent page state for iterative workflows and authenticated sessions.                                                                                                                                                                                                                                             |
+| **frontend**           | UI/UX tasks, styling                                    | Designer-turned-developer persona. Crafts strong UI/UX even without design mockups. Emphasizes bold aesthetic direction, distinctive typography, cohesive color palettes.                                                                                                                                                                     |
+| **review-work**        | "review work", "review my work", "QA my work"          | Post-implementation review orchestrator. Launches 5 parallel background sub-agents for comprehensive review: goal verification, code quality, security, hands-on QA, and context mining. All must pass for review to pass.                                                                                                                     |
+| **ulw-research**       | `ulw-research`, `ultraresearch`, deep research requests | Maximum-saturation research. Runs parallel explore/librarian swarms across code, docs, web, and OSS repos; recursively follows `EXPAND` leads until convergence; proves contested claims by running code; and returns cited synthesis. `ultraresearch` is the legacy alias.                                                                   |
+| **$omo:remove-ai-slops** | "remove AI slop", "de-AI", "humanize"                 | Removes AI-generated code smells from files while preserving functionality. Identifies and eliminates verbose comments, redundant error handling, over-engineered patterns, and generic AI phrasing.                                                                                                                                           |
+
+`ulw-research` is intentionally explicit. Ordinary questions and normal implementation context-gathering will not trigger a saturation swarm. Use `ulw-research` or `ultraresearch` when the research itself is the deliverable and every claim needs a citation, a proof artifact, or an execution-backed verdict.
+
+#### git-master Core Principles
+
+**Multiple Commits by Default**:
+
+```
+3+ files -> MUST be 2+ commits
+5+ files -> MUST be 3+ commits
+10+ files -> MUST be 5+ commits
+```
+
+**Automatic Style Detection**:
+
+- Analyzes last 30 commits for language (Korean/English) and style (semantic/plain/short)
+- Matches your repo's commit conventions automatically
+
+**Usage**:
+
+```
+/git-master commit these changes
+/git-master rebase onto main
+/git-master who wrote this authentication code?
+```
+
+#### frontend Design Process
+
+- **Design Process**: Purpose, Tone, Constraints, Differentiation
+- **Aesthetic Direction**: Choose extreme - brutalist, maximalist, retro-futuristic, luxury, playful
+- **Typography**: Distinctive fonts, avoid generic (Inter, Roboto, Arial)
+- **Color**: Cohesive palettes with sharp accents, avoid purple-on-white AI slop
+- **Motion**: High-impact staggered reveals, scroll-triggering, surprising hover states
+- **Anti-Patterns**: Generic fonts, predictable layouts, cookie-cutter design
+
+### Browser Automation Options
+
+Oh-My-OpenAgent provides two browser automation providers, configurable via `browser_automation_engine.provider`.
+
+#### Option 1: Playwright MCP (Default)
+
+```yaml
+mcp:
+  playwright:
+    command: npx
+    args: ["@playwright/mcp@latest"]
+```
+
+**Usage**:
+
+```
+/playwright Navigate to example.com and take a screenshot
+```
+
+#### Option 2: Agent Browser CLI (Vercel)
+
+```json
+{
+  "browser_automation_engine": {
+    "provider": "agent-browser"
+  }
+}
+```
+
+**Requires installation**:
+
+```bash
+bun add -g agent-browser
+```
+
+**Usage**:
+
+```
+Use agent-browser to navigate to example.com and extract the main heading
+```
+
+**Capabilities (Both Providers)**:
+
+- Navigate and interact with web pages
+- Take screenshots and PDFs
+- Fill forms and click elements
+- Wait for network requests
+- Scrape content
+
+### Custom Skill Creation (SKILL.md)
+
+You can add custom skills directly to `.opencode/skills/` in your project root or `~/.claude/skills/` in your home directory.
+
+**Example: `.opencode/skills/my-skill/SKILL.md`**
+
+```markdown
+---
+name: my-skill
+description: My special custom skill
+mcp:
+  my-mcp:
+    command: npx
+    args: ["-y", "my-mcp-server"]
+---
+
+# My Skill Prompt
+
+This content will be injected into the agent's system prompt.
+...
+```
+
+**Skill Load Locations** (priority order, highest first):
+
+- `.opencode/skills/*/SKILL.md` (project, OpenCode native)
+- `~/.config/opencode/skills/*/SKILL.md` (user, OpenCode native)
+- `.claude/skills/*/SKILL.md` (project, Claude Code compat)
+- `.agents/skills/*/SKILL.md` (project, Agents convention)
+- `~/.agents/skills/*/SKILL.md` (user, Agents convention)
+
+Same-named skill at higher priority overrides lower.
+
+Loaded skill display priority follows this order: `project > user > opencode > builtin/plugin`.
+
+Disable built-in skills via `disabled_skills: ["playwright"]` in config.
+
+### Category + Skill Combo Strategies
+
+You can create powerful specialized agents by combining Categories and Skills.
+
+#### The Designer (UI Implementation)
+
+- **Category**: `visual-engineering`
+- **load_skills**: `["frontend", "playwright"]`
+- **Effect**: Implements aesthetic UI and verifies rendering results directly in browser.
+
+#### The Architect (Design Review)
+
+- **Category**: `ultrabrain`
+- **load_skills**: `[]` (pure reasoning)
+- **Effect**: Leverages GPT-5.5 xhigh reasoning for in-depth system architecture analysis.
+
+#### The Maintainer (Quick Fixes)
+
+- **Category**: `quick`
+- **load_skills**: `["git-master"]`
+- **Effect**: Uses cost-effective models to quickly fix code and generate clean commits.
+
+### task Prompt Guide
+
+When delegating, **clear and specific** prompts are essential. Include these 7 elements:
+
+1. **TASK**: What needs to be done? (single objective)
+2. **EXPECTED OUTCOME**: What is the deliverable?
+3. **REQUIRED SKILLS**: Which skills should be loaded via `load_skills`?
+4. **REQUIRED TOOLS**: Which tools must be used? (whitelist)
+5. **MUST DO**: What must be done (constraints)
+6. **MUST NOT DO**: What must never be done
+7. **CONTEXT**: File paths, existing patterns, reference materials
+
+**Bad Example**:
+
+> "Fix this"
+
+**Good Example**:
+
+> **TASK**: Fix mobile layout breaking issue in `LoginButton.tsx`
+> **CONTEXT**: `src/components/LoginButton.tsx`, using Tailwind CSS
+> **MUST DO**: Change flex-direction at `md:` breakpoint
+> **MUST NOT DO**: Modify existing desktop layout
+> **EXPECTED**: Buttons align vertically on mobile
+
 ## Tools
 
 Tool registration is config-gated. `packages/omo-opencode/src/tools/` has 16 directories, and exposed tools range from **20 minimum to 39 maximum**.
@@ -612,14 +641,9 @@ Hashline IDs use characters from `ZPMQVRWSNKTXJBYH`.
 | **lsp_find_references** | Find all usages across workspace            |
 | **lsp_symbols**         | Get file outline or workspace symbol search |
 
-### AST-Grep Tools
+### AST-Grep Skill
 
-These user-facing tool names are served by the built-in local `ast_grep` MCP backed by `packages/ast-grep-mcp/`.
-
-| Tool                 | Description                                  |
-| -------------------- | -------------------------------------------- |
-| **ast_grep_search**  | AST-aware code pattern search (25 languages) |
-| **ast_grep_replace** | AST-aware code replacement                   |
+AST-aware search and rewrite now lives in the `ast-grep` skill. Load it with the `skill` tool when you need structural matching, then use its `sg` helper commands for search or rewrite workflows.
 
 ### Delegation Tools
 
@@ -651,6 +675,32 @@ These user-facing tool names are served by the built-in local `ast_grep` MCP bac
 | **session_read**   | Read messages and history from a session |
 | **session_search** | Full-text search across session messages |
 | **session_info**   | Get session metadata and statistics      |
+
+#### Finding older sessions hidden by `/sessions`
+
+OpenCode's built-in `/sessions` picker can omit older sessions even when they still exist in the local session store. Use OMO's session tools to find the ID, then continue it from the TUI.
+
+```ts
+session_list({
+  from_date: "2026-01-01T00:00:00Z",
+  to_date: "2026-02-11T00:00:00Z",
+  project_path: "/absolute/path/to/project",
+  limit: 50,
+})
+```
+
+After you find the session ID, type this in OpenCode:
+
+```text
+/continue <session_id>
+```
+
+If you remember text from the conversation but not the date, search first and then read the matching session:
+
+```ts
+session_search({ query: "migration bug", limit: 20 })
+session_read({ session_id: "ses_...", limit: 200 })
+```
 
 ### Task Management Tools
 
@@ -953,7 +1003,6 @@ The three tiers of MCP servers and where they come from:
 | **context7**  | Official documentation lookup for any library/framework                                       |
 | **grep_app**  | Ultra-fast code search across public GitHub repos. Great for finding implementation examples. |
 | **lsp**       | Local LSP tools for diagnostics, symbols, references, and renames                             |
-| **ast_grep**  | Local AST-aware search and rewrite tools                                                      |
 
 ### Skill-Embedded MCPs
 
