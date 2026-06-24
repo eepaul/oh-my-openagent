@@ -1,14 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from "bun:test"
-
-const processWithCli = mock(async () => {})
-
-mock.module("./cli-runner", () => ({
-  initializeCommentCheckerCli: () => {},
-  getCommentCheckerCliPathPromise: () => Promise.resolve("/tmp/fake-comment-checker"),
-  isCliPathUsable: () => true,
-  processWithCli,
-  processApplyPatchEditsWithCli: async () => {},
-}))
+import { clearCommentCheckerTestMocks, processWithCli } from "./comment-checker-test-mocks"
 
 afterAll(() => {
   mock.restore()
@@ -20,7 +11,7 @@ const { _resetCommentCheckerInitializationForTesting } = await import("./initial
 
 describe("comment-checker mutation tool routing", () => {
   beforeEach(() => {
-    processWithCli.mockClear()
+    clearCommentCheckerTestMocks()
     stopPendingCallCleanup()
     _resetCommentCheckerInitializationForTesting()
   })

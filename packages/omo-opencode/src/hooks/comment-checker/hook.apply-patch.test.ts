@@ -1,14 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test"
-
-const processApplyPatchEditsWithCli = mock(async () => {})
-
-mock.module("./cli-runner", () => ({
-  initializeCommentCheckerCli: () => {},
-  getCommentCheckerCliPathPromise: () => Promise.resolve("/tmp/fake-comment-checker"),
-  isCliPathUsable: () => true,
-  processWithCli: async () => {},
-  processApplyPatchEditsWithCli,
-}))
+import { clearCommentCheckerTestMocks, processApplyPatchEditsWithCli } from "./comment-checker-test-mocks"
 
 afterAll(() => { mock.restore() })
 
@@ -16,7 +7,7 @@ const { createCommentCheckerHooks } = await import("./hook")
 
 describe("comment-checker apply_patch integration", () => {
   beforeEach(() => {
-    processApplyPatchEditsWithCli.mockClear()
+    clearCommentCheckerTestMocks()
   })
 
   it("runs comment checker using apply_patch metadata.files", async () => {

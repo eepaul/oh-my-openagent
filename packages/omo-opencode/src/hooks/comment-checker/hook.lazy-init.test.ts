@@ -1,22 +1,9 @@
-import { describe, expect, it, mock, afterAll } from "bun:test"
-
-const startPendingCallCleanup = mock(() => {})
-const initializeCommentCheckerCli = mock(() => {})
-
-mock.module("./cli-runner", () => ({
+import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test"
+import {
+  clearCommentCheckerTestMocks,
   initializeCommentCheckerCli,
-  getCommentCheckerCliPathPromise: () => Promise.resolve("/tmp/fake-comment-checker"),
-  isCliPathUsable: () => true,
-  processWithCli: async () => {},
-  processApplyPatchEditsWithCli: async () => {},
-}))
-
-mock.module("./pending-calls", () => ({
-  registerPendingCall: () => {},
   startPendingCallCleanup,
-  stopPendingCallCleanup: () => {},
-  takePendingCall: () => undefined,
-}))
+} from "./comment-checker-test-mocks"
 
 afterAll(() => {
   mock.restore()
@@ -25,6 +12,10 @@ afterAll(() => {
 const { createCommentCheckerHooks } = await import("./hook")
 
 describe("comment-checker lazy initialization", () => {
+  beforeEach(() => {
+    clearCommentCheckerTestMocks()
+  })
+
   it("initializes CLI and cleanup on first tool hook call only", async () => {
     // given
     const hooks = createCommentCheckerHooks()
