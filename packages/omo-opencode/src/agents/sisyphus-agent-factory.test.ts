@@ -91,7 +91,7 @@ describe("createSisyphusAgent", () => {
   });
 
   describe("#given GPT-family Sisyphus models", () => {
-    test("#when creating agents #then preserves reasoning and apply_patch restrictions", () => {
+    test("#when creating agents #then preserves reasoning and leaves apply_patch available", () => {
       // given
       const models = ["openai/gpt-5.5", "openai/gpt-5.4"];
 
@@ -101,7 +101,7 @@ describe("createSisyphusAgent", () => {
 
         // then
         expect(agent.reasoningEffort).toBe("medium");
-        expect(permissionValue(agent.permission, "apply_patch")).toBe("deny");
+        expect(permissionValue(agent.permission, "apply_patch")).toBeUndefined();
         expect(agent.thinking).toBeUndefined();
       }
     });
@@ -123,6 +123,22 @@ describe("createSisyphusAgent", () => {
         type: "enabled",
         budgetTokens: 32000,
       });
+    });
+  });
+
+  describe("#given a GLM Sisyphus model", () => {
+    test("#when creating the agent #then uses the GLM-native prompt with bare config", () => {
+      // given
+      const model = "zai/glm-5.2";
+
+      // when
+      const agent = createSisyphusAgent(model);
+
+      // then
+      expect(agent.prompt).toContain("running on GLM 5.2");
+      expect(agent.prompt).toContain("<glm_52_calibration>");
+      expect(agent.thinking).toBeUndefined();
+      expect(agent.reasoningEffort).toBeUndefined();
     });
   });
 

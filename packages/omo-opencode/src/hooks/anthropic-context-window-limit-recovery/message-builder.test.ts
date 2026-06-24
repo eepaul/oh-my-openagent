@@ -1,4 +1,7 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { preserveModuleMocksForTestFile, restoreModuleMocksForTestFile } from "../../testing/module-mock-lifecycle"
+
+mock.restore()
 
 const replaceEmptyTextPartsAsync = mock(() => Promise.resolve(false))
 const injectTextPartAsync = mock(() => Promise.resolve(false))
@@ -28,9 +31,12 @@ const textPartInjectorMockFactory = () => ({
 mock.module("./storage/text-part-injector", textPartInjectorMockFactory)
 mock.module("./storage/text-part-injector.ts", textPartInjectorMockFactory)
 
+preserveModuleMocksForTestFile(import.meta.url)
+
 const messageBuilderModulePromise = import("./message-builder")
 
 afterAll(() => {
+  restoreModuleMocksForTestFile(import.meta.url)
   mock.restore()
 })
 

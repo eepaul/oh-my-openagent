@@ -10,6 +10,7 @@ node_modules/
 
 # Build output
 dist/
+packages/omo-codex/plugin/skills/
 
 # Platform binaries (built, not committed)
 packages/*/bin/oh-my-opencode
@@ -55,4 +56,7 @@ session-ses_*.md
 pr-*.md
 plans/
 .ulw/
-.claude/
+.claude/*
+!.claude/skills
+!.claude/commands
+!.claude/settings.json
