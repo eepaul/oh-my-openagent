@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 type PackageJson = {
@@ -21,8 +22,8 @@ function readPackageJson(path: string): PackageJson {
 describe("package metadata", () => {
 	it("#given packaged files #when validating entrypoints #then package metadata is consistent", () => {
 		// given
-		const packageJson = readPackageJson("package.json");
-		const cliSource = readFileSync("src/cli.ts", "utf8");
+		const packageJson = readPackageJson(fileURLToPath(new URL("../package.json", import.meta.url)));
+		const cliSource = readFileSync(fileURLToPath(new URL("../src/cli.ts", import.meta.url)), "utf8");
 
 		// then
 		expect(packageJson.type).toBe("module");
