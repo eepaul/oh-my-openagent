@@ -189,7 +189,7 @@ test("#given bun global lazycodex wrapper #when running update dry-run #then pri
 	// given
 	const scriptPath = fileURLToPath(new URL("./install-local.mjs", import.meta.url));
 	const tempHome = mkdtempSync(join(tmpdir(), "lazycodex-bun-global-dry-run-"));
-	const binPath = createBunGlobalLazyCodexSymlink(tempHome, scriptPath);
+	const binPath = createBunGlobalLazyCodexWrapper(tempHome, scriptPath);
 
 	try {
 		// when
@@ -216,7 +216,7 @@ test("#given bun global lazycodex wrapper and untrusted known scripts #when upda
 	const tempHome = mkdtempSync(join(tmpdir(), "lazycodex-bun-global-trust-"));
 	const tempBin = mkdtempSync(join(tmpdir(), "lazycodex-bun-bin-"));
 	const commandLogPath = join(tempHome, "commands.log");
-	const binPath = createBunGlobalLazyCodexSymlink(tempHome, scriptPath);
+	const binPath = createBunGlobalLazyCodexWrapper(tempHome, scriptPath);
 	writeFakeBunCommand(tempBin);
 	writeFakeNpxCommand(tempBin);
 
@@ -266,11 +266,34 @@ test("#given current lazycodex version #when running update dry-run #then report
 	assert.equal(output, "lazycodex-ai 1.0.1 is already up to date.");
 });
 
-function createBunGlobalLazyCodexSymlink(homeDir, scriptPath) {
+function createBunGlobalLazyCodexWrapper(homeDir, scriptPath) {
 	const packageBinDir = join(homeDir, ".bun", "install", "global", "node_modules", "lazycodex-ai", "bin");
 	mkdirSync(packageBinDir, { recursive: true });
 	const binPath = join(packageBinDir, "lazycodex-ai");
-	symlinkSync(scriptPath, binPath);
+	const generatedInstallerUrl = pathToFileURL(fileURLToPath(new URL("./install-dist/install-local.mjs", import.meta.url))).href;
+	const repoRoot = join(dirname(scriptPath), "..", "..", "..");
+	writeFileSync(
+		binPath,
+		`#!/usr/bin/env node
+import { runLazyCodexInstallLocalCli } from ${JSON.stringify(generatedInstallerUrl)};
+
+runLazyCodexInstallLocalCli({
+	argv: process.argv.slice(2),
+	defaultRepoRoot: ${JSON.stringify(repoRoot)},
+	entrypointPath: ${JSON.stringify(scriptPath)},
+	invokedPath: process.argv[1] ?? "",
+	cwd: process.cwd(),
+	env: process.env,
+	log: console.log,
+}).then((exitCode) => {
+	process.exitCode = exitCode;
+}).catch((error) => {
+	console.error(error instanceof Error ? error.message : error);
+	process.exitCode = 1;
+});
+`,
+	);
+	chmodSync(binPath, 0o755);
 	return binPath;
 }
 
