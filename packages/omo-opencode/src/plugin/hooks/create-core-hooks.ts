@@ -43,6 +43,7 @@ export function createCoreHooks(args: {
     isHookEnabled: (name) => isHookEnabled(name as HookName),
     safeHookEnabled,
     ralphLoop: session.ralphLoop,
+    getAutoCompactState: session.anthropicContextWindowLimitRecovery?.getAutoCompactState,
   })
 
   return {

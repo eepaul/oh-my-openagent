@@ -2,8 +2,9 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import type { Client } from "./client"
 import type { AutoCompactState, ParsedTokenLimitError } from "./types"
 import type { ExperimentalConfig, OhMyOpenCodeConfig } from "../../config"
-import { parseAnthropicTokenLimitError } from "./parser"
+import { parseAnthropicTokenLimitError, parseToolPairMismatchError } from "./parser"
 import { executeCompact, getLastAssistant } from "./executor"
+import { runToolPairRepairStrategy } from "./tool-pair-repair-strategy"
 import { attemptDeduplicationRecovery } from "./deduplication-recovery"
 import { clearSessionState } from "./state"
 import { clearAllSessionTimeouts, clearSessionTimeout } from "./session-timeout-map"
@@ -18,6 +19,8 @@ export interface AnthropicContextWindowLimitRecoveryOptions {
     getLastAssistant?: typeof getLastAssistant
     log?: typeof log
     parseAnthropicTokenLimitError?: typeof parseAnthropicTokenLimitError
+    parseToolPairMismatchError?: typeof parseToolPairMismatchError
+    runToolPairRepairStrategy?: typeof runToolPairRepairStrategy
   }
 }
 
@@ -47,6 +50,8 @@ export function createAnthropicContextWindowLimitRecoveryHook(
     getLastAssistant,
     log,
     parseAnthropicTokenLimitError,
+    parseToolPairMismatchError,
+    runToolPairRepairStrategy,
     ...options?.dependencies,
   }
   const pendingCompactionTimeoutBySession = new Map<string, ReturnType<typeof setTimeout>>()
@@ -60,6 +65,7 @@ export function createAnthropicContextWindowLimitRecoveryHook(
         clearSessionTimeout(pendingCompactionTimeoutBySession, sessionID)
 
         clearSessionState(autoCompactState, sessionID)
+        autoCompactState.toolPairRepairMessagesBySession?.delete(sessionID)
       }
       return
     }
@@ -69,6 +75,7 @@ export function createAnthropicContextWindowLimitRecoveryHook(
       if (sessionID) {
         clearSessionTimeout(pendingCompactionTimeoutBySession, sessionID)
         clearSessionState(autoCompactState, sessionID)
+        autoCompactState.toolPairRepairMessagesBySession?.delete(sessionID)
       }
       return
     }
@@ -77,6 +84,21 @@ export function createAnthropicContextWindowLimitRecoveryHook(
       const sessionID = resolveSessionEventID(props)
       dependencies.log("[auto-compact] session.error received", { sessionID, error: props?.error })
       if (!sessionID) return
+
+      const toolPairParsed = dependencies.parseToolPairMismatchError(props?.error)
+      if (toolPairParsed) {
+        dependencies.log("[auto-compact] tool_pair_mismatch detected", { sessionID })
+        await dependencies.runToolPairRepairStrategy({
+          sessionID,
+          parsed: toolPairParsed,
+          autoCompactState,
+          client: ctx.client as Client,
+          directory: ctx.directory,
+          pluginConfig,
+          experimental,
+        })
+        return
+      }
 
       const parsed = dependencies.parseAnthropicTokenLimitError(props?.error)
       dependencies.log("[auto-compact] parsed result", { parsed, hasError: !!props?.error })
@@ -135,6 +157,15 @@ export function createAnthropicContextWindowLimitRecoveryHook(
 
       if (sessionID && info?.role === "assistant" && info.error) {
         dependencies.log("[auto-compact] message.updated with error", { sessionID, error: info.error })
+
+        const toolPairParsed = dependencies.parseToolPairMismatchError(info.error)
+        if (toolPairParsed) {
+          toolPairParsed.providerID = info.providerID as string | undefined
+          toolPairParsed.modelID = info.modelID as string | undefined
+          autoCompactState.errorDataBySession.set(sessionID, toolPairParsed)
+          return
+        }
+
         const parsed = dependencies.parseAnthropicTokenLimitError(info.error)
         dependencies.log("[auto-compact] message.updated parsed result", { parsed })
         if (parsed) {
@@ -200,5 +231,6 @@ export function createAnthropicContextWindowLimitRecoveryHook(
       clearAllSessionTimeouts(pendingCompactionTimeoutBySession)
       clearAllSessionTimeouts(autoCompactState.retryTimerBySession)
     },
+    getAutoCompactState: (): AutoCompactState => autoCompactState,
   }
 }

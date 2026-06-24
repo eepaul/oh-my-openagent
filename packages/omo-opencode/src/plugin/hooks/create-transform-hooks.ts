@@ -1,6 +1,7 @@
 import type { OhMyOpenCodeConfig } from "../../config"
 import type { PluginContext } from "../types"
 import type { RalphLoopHook } from "../../hooks/ralph-loop"
+import type { AutoCompactState } from "../../hooks/anthropic-context-window-limit-recovery"
 
 import {
   createClaudeCodeHooksHook,
@@ -8,6 +9,7 @@ import {
   createTeamMailboxInjector,
   createTeamModeStatusInjector,
   createToolPairValidatorHook,
+  createToolPairRepairInjectorHook,
 } from "../../hooks"
 import {
   contextCollector,
@@ -22,6 +24,7 @@ export type TransformHooks = {
   teamModeStatusInjector: ReturnType<typeof createTeamModeStatusInjector> | null
   teamMailboxInjector: ReturnType<typeof createTeamMailboxInjector> | null
   toolPairValidator: ReturnType<typeof createToolPairValidatorHook> | null
+  toolPairRepairInjector: ReturnType<typeof createToolPairRepairInjectorHook> | null
 }
 
 export function createTransformHooks(args: {
@@ -30,8 +33,9 @@ export function createTransformHooks(args: {
   isHookEnabled: (hookName: string) => boolean
   safeHookEnabled?: boolean
   ralphLoop?: RalphLoopHook | null
+  getAutoCompactState?: () => AutoCompactState | undefined
 }): TransformHooks {
-  const { ctx, pluginConfig, isHookEnabled, ralphLoop } = args
+  const { ctx, pluginConfig, isHookEnabled, ralphLoop, getAutoCompactState } = args
   const safeHookEnabled = args.safeHookEnabled ?? true
 
   const claudeCodeHooks = isHookEnabled("claude-code-hooks")
@@ -94,6 +98,14 @@ export function createTransformHooks(args: {
       )
     : null
 
+  const toolPairRepairInjector = isHookEnabled("tool-pair-repair-injector") && getAutoCompactState
+    ? safeCreateHook(
+        "tool-pair-repair-injector",
+        () => createToolPairRepairInjectorHook(getAutoCompactState),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
   return {
     claudeCodeHooks,
     keywordDetector,
@@ -101,5 +113,6 @@ export function createTransformHooks(args: {
     teamModeStatusInjector,
     teamMailboxInjector,
     toolPairValidator,
+    toolPairRepairInjector,
   }
 }

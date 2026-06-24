@@ -6,6 +6,8 @@ import { createAnthropicContextWindowLimitRecoveryHook } from "./recovery-hook"
 type ExecuteCompactFn = typeof import("./executor").executeCompact
 type GetLastAssistantFn = typeof import("./executor").getLastAssistant
 type ParseAnthropicTokenLimitErrorFn = typeof import("./parser").parseAnthropicTokenLimitError
+type ParseToolPairMismatchErrorFn = typeof import("./parser").parseToolPairMismatchError
+type RunToolPairRepairStrategyFn = typeof import("./tool-pair-repair-strategy").runToolPairRepairStrategy
 
 export type MockLastAssistant = {
   info: {
@@ -31,6 +33,8 @@ export const parseAnthropicTokenLimitErrorMock = mock<ParseAnthropicTokenLimitEr
   providerID: "anthropic",
   modelID: "claude-sonnet-4-6",
 }))
+export const parseToolPairMismatchErrorMock = mock<ParseToolPairMismatchErrorFn>(() => null)
+export const runToolPairRepairStrategyMock = mock<RunToolPairRepairStrategyFn>(async () => {})
 
 const pluginConfig = {
   git_master: {
@@ -50,6 +54,8 @@ export function createRecoveryHook() {
         getLastAssistant: getLastAssistantMock,
         log: () => {},
         parseAnthropicTokenLimitError: parseAnthropicTokenLimitErrorMock,
+        parseToolPairMismatchError: parseToolPairMismatchErrorMock,
+        runToolPairRepairStrategy: runToolPairRepairStrategyMock,
       },
     } as never,
   )

@@ -4,6 +4,8 @@ import {
   executeCompactMock,
   getLastAssistantMock,
   parseAnthropicTokenLimitErrorMock,
+  parseToolPairMismatchErrorMock,
+  runToolPairRepairStrategyMock,
   setupDelayedTimeoutMocks,
 } from "./recovery-hook.test-support"
 
@@ -12,6 +14,8 @@ describe("createAnthropicContextWindowLimitRecoveryHook", () => {
     executeCompactMock.mockClear()
     getLastAssistantMock.mockClear()
     parseAnthropicTokenLimitErrorMock.mockClear()
+    parseToolPairMismatchErrorMock.mockClear()
+    runToolPairRepairStrategyMock.mockClear()
   })
 
   afterEach(() => {
@@ -167,6 +171,67 @@ describe("createAnthropicContextWindowLimitRecoveryHook", () => {
 
       //#then
       expect(getClearTimeoutCalls()).toEqual(expect.arrayContaining([retryTimer, pendingTimer]))
+    } finally {
+      restore()
+    }
+  })
+
+  test("#given session.error with tool_pair_mismatch #when handled #then runs repair strategy before token-limit path and skips compact", async () => {
+    //#given
+    parseToolPairMismatchErrorMock.mockReturnValueOnce({
+      currentTokens: 0,
+      maxTokens: 0,
+      errorType: "tool_pair_mismatch",
+      messageIndex: 3,
+      toolUseIDs: ["toolu_abc"],
+    })
+    const hook = createRecoveryHook()
+
+    //#when
+    await hook.event({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "session-tool-pair",
+          error: { error: { message: "tool_use ids were found without tool_result blocks immediately after" } },
+        },
+      },
+    })
+
+    //#then
+    expect(runToolPairRepairStrategyMock).toHaveBeenCalledTimes(1)
+    const repairArgs = runToolPairRepairStrategyMock.mock.calls[0]?.[0]
+    expect(repairArgs?.sessionID).toBe("session-tool-pair")
+    expect(repairArgs?.parsed.errorType).toBe("tool_pair_mismatch")
+    expect(parseAnthropicTokenLimitErrorMock).not.toHaveBeenCalled()
+    expect(executeCompactMock).not.toHaveBeenCalled()
+  })
+
+  test("#given session.error with token-limit error #when handled #then keeps existing compact path and skips tool-pair repair", async () => {
+    //#given
+    const { restore } = setupDelayedTimeoutMocks()
+    const hook = createRecoveryHook()
+
+    try {
+      //#when
+      await hook.event({
+        event: {
+          type: "session.error",
+          properties: { sessionID: "session-token-regression", error: "prompt is too long" },
+        },
+      })
+
+      await hook.event({
+        event: {
+          type: "session.idle",
+          properties: { sessionID: "session-token-regression" },
+        },
+      })
+
+      //#then
+      expect(runToolPairRepairStrategyMock).not.toHaveBeenCalled()
+      expect(parseAnthropicTokenLimitErrorMock).toHaveBeenCalled()
+      expect(executeCompactMock).toHaveBeenCalledTimes(1)
     } finally {
       restore()
     }
