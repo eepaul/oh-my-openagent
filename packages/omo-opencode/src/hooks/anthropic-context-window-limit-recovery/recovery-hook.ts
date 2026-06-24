@@ -29,6 +29,7 @@ function createRecoveryState(): AutoCompactState {
     retryTimerBySession: new Map(),
     truncateStateBySession: new Map(),
     emptyContentAttemptBySession: new Map(),
+    toolPairRepairBySession: new Map<string, Set<string>>(),
     compactionInProgress: new Set<string>(),
   }
 }

@@ -6,7 +6,10 @@ export interface ParsedTokenLimitError {
   providerID?: string
   modelID?: string
   messageIndex?: number
+  toolUseIDs?: string[]
 }
+
+export const TOOL_PAIR_MISMATCH = "tool_pair_mismatch" as const
 
 export interface RetryState {
   attempt: number
@@ -26,6 +29,7 @@ export interface AutoCompactState {
   retryTimerBySession: Map<string, ReturnType<typeof setTimeout>>
   truncateStateBySession: Map<string, TruncateState>
   emptyContentAttemptBySession: Map<string, number>
+  toolPairRepairBySession: Map<string, Set<string>>
   compactionInProgress: Set<string>
 }
 
