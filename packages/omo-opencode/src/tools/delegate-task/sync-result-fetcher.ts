@@ -1,17 +1,14 @@
-import type { OpencodeClient } from "./types"
 import type { SessionMessage } from "./executor-types"
 import { normalizeSDKResponse } from "../../shared"
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+type SessionMessagesClient = {
+  readonly session: {
+    readonly messages: (input: { readonly path: { readonly id: string } }) => Promise<unknown>
+  }
 }
 
-function messageText(msg: SessionMessage): string {
-  return (msg.parts ?? [])
-    .filter((p) => p.type === "text" || p.type === "reasoning")
-    .map((p) => p.text ?? "")
-    .filter(Boolean)
-    .join("\n")
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 // Final text output only — excludes reasoning. The deliverable envelope applies
@@ -25,6 +22,10 @@ function messageFinalText(msg: SessionMessage): string {
     .map((p) => p.text ?? "")
     .filter(Boolean)
     .join("\n")
+}
+
+function isOutputLimitFinish(msg: SessionMessage): boolean {
+  return msg.info?.finish === "length"
 }
 
 /**
@@ -55,7 +56,7 @@ function extractTaggedDeliverable(assistantMessages: SessionMessage[], tag: stri
 }
 
 export async function fetchSyncResult(
-  client: OpencodeClient,
+  client: SessionMessagesClient,
   sessionID: string,
   anchorMessageCount?: number,
   options?: { strictAbortRecovery?: boolean; deliverableTag?: string }
@@ -95,6 +96,13 @@ export async function fetchSyncResult(
 
   if (!lastMessage) {
     return { ok: false, error: `No assistant response found.\n\nSession ID: ${sessionID}` }
+  }
+
+  if (isOutputLimitFinish(lastMessage)) {
+    return {
+      ok: false,
+      error: `Latest assistant message hit the model output limit before completing. Resume the same task_id instead of treating this sync subagent as done.\n\nSession ID: ${sessionID}`,
+    }
   }
 
   // Abort recovery must validate the LATEST assistant message before accepting
