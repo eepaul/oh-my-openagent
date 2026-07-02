@@ -1,3 +1,4 @@
+/// <reference types="bun-types" />
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import {
   createRecoveryHook,
@@ -203,6 +204,11 @@ describe("createAnthropicContextWindowLimitRecoveryHook", () => {
     const repairArgs = runToolPairRepairStrategyMock.mock.calls[0]?.[0]
     expect(repairArgs?.sessionID).toBe("session-tool-pair")
     expect(repairArgs?.parsed.errorType).toBe("tool_pair_mismatch")
+    expect(repairArgs?.parsed.providerID).toBe("anthropic")
+    expect(repairArgs?.parsed.modelID).toBe("claude-sonnet-4-6")
+    expect(repairArgs?.autoCompactState.pendingCompact.has("session-tool-pair")).toBe(true)
+    expect(repairArgs?.autoCompactState.errorDataBySession.get("session-tool-pair")).toEqual(repairArgs?.parsed)
+    expect(getLastAssistantMock).toHaveBeenCalledTimes(1)
     expect(parseAnthropicTokenLimitErrorMock).not.toHaveBeenCalled()
     expect(executeCompactMock).not.toHaveBeenCalled()
   })
