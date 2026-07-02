@@ -6,6 +6,7 @@ export const CONTEXT_PRESSURE_SKILL_BUDGET_BYTES = 25_000;
 
 export const expectedSkills = [
 	"ast-grep",
+	"coding-agent-sessions",
 	"comment-checker",
 	"debugging",
 	"frontend",
@@ -30,6 +31,8 @@ export const expectedSkills = [
 	"visual-qa",
 ];
 
+export const hiddenSharedSkills = ["ultraresearch"];
+
 export const componentSkillSources = [
 	["comment-checker", "components/comment-checker/skills/comment-checker"],
 	["lsp", "components/lsp/skills/lsp"],
@@ -41,6 +44,7 @@ export const componentSkillSources = [
 
 const codexCompatibilityEndMarkers = [
 	"For work likely to exceed one wait cycle, require the child to send `WORKING: <task> - <current phase>` before long passes and `BLOCKED: <reason>` only when progress stops. A `multi_agent_v1.wait_agent` timeout only means no new mailbox update arrived. Treat a running child as alive. Fallback only when the child is completed without the deliverable, ack-only after followup, explicitly `BLOCKED:`, or no longer running.\n\n",
+	"On `multi_agent_v2` sessions the same `agent_type` applies (the OMO installer exposes it) with `fork_turns` instead of `fork_context`. If a code block below conflicts with this section, this section wins.\n\n",
 	"Role-specific behavior must be described in a self-contained `message`. Use `fork_context: false` to start the child with only the initial prompt (no parent history); use `fork_context: true` only when full parent history is truly required. Include any required conversation context, files, diffs, constraints, and requested skill names directly in the spawned agent's `message`. If a code block below conflicts with this section, this section wins.\n\n",
 	"When translating `load_skills=[...]`, include the requested skill names in the spawned agent's `message`. If a code block below conflicts with this section, this section wins.\n\n",
 	"When translating `load_skills=[...]`, name the skills inside the spawned agent's `message`. If a code block below conflicts with this section, this section wins.\n\n",
@@ -89,6 +93,22 @@ const reviewWorkCodexGatePattern =
 	/\nWhen `review-work` is used as a final implementation, PR, or `\$start-work`\ngate, it is blocking\. A timeout, missing deliverable, ack-only response,\nexplicit `BLOCKED:`, or inconclusive lane is not a pass\. Treat that lane as\nfailed, investigate the underlying uncertainty with the `debugging` skill when\nruntime behavior may be wrong, fix with evidence, and rerun the affected lane\nbefore claiming completion, creating or handing off a PR, or merging\.\n\nWhen reviewing a PR or branch, collect diff, file contents, and verification\nresults from a dedicated review worktree attached to that branch\. Never\ncheckout, test, or edit the review branch in the main worktree\.\n\nReview evidence must be safe to share\. Redact or mask secrets and sensitive\nuser data before including evidence in logs, PR bodies, or handoffs\. Never\ninclude raw tokens, credentials, auth headers, cookies, API keys, env dumps,\nprivate logs, or PII; summarize with lengths, hashes, and short non-sensitive\nprefixes when identity is needed\.\n/;
 
 export function removeCodexSkillOverlays(skillName, content) {
+	if (skillName === "ulw-research") {
+		return content
+			.replace(
+				", any 'ulw' research wording,",
+				", the legacy alias 'ultraresearch', any 'ulw' research wording,",
+			)
+			.replace(
+				"the word \"ulw-research\" (also `/ulw-research`, `$ulw-research`), ",
+				"the word \"ulw-research\" (also `/ulw-research`, `$ulw-research`), the legacy alias \"ultraresearch\" (also `/ultraresearch`, `$ultraresearch`), ",
+			)
+			.replace(
+				"answer those normally, and mention that `ulw-research` is available when a question would clearly benefit from it.",
+				"answer those normally, and mention that `ulw-research` is available (legacy alias: `ultraresearch`) when a question would clearly benefit from it.",
+			)
+			.replace("# ULW-Research Synthesis: <query>", "# Ultraresearch Synthesis: <query>");
+	}
 	if (skillName === "start-work") {
 		return content
 			.replace(startWorkCodexCompletion, startWorkOriginalCompletion)

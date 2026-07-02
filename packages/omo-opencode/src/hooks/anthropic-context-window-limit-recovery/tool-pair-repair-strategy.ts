@@ -168,7 +168,9 @@ export async function runToolPairRepairStrategy(params: RunToolPairRepairStrateg
     resolvedIDs.push(toolUseID)
   }
 
-  if (resolvedParts.length > 0) {
+  const hasResolvedParts = resolvedParts.length > 0
+
+  if (hasResolvedParts) {
     appendSyntheticMessage(
       params.autoCompactState,
       params.sessionID,
@@ -178,13 +180,18 @@ export async function runToolPairRepairStrategy(params: RunToolPairRepairStrateg
     for (const toolUseID of resolvedIDs) {
       repaired.add(createIdempotencyKey(messageIndex, toolUseID))
     }
+
+    await runFallback(params)
   }
 
-  if (unresolvedIDs.length > 0 || resolvedParts.length === 0) {
+  if (unresolvedIDs.length > 0) {
     log("[tool-pair-recovery] falling back to summarize retry for unresolved tool results", {
       sessionID: params.sessionID,
       unresolvedIDs,
     })
+  }
+
+  if (!hasResolvedParts) {
     await runFallback(params)
   }
 }

@@ -88,6 +88,23 @@ export function createAnthropicContextWindowLimitRecoveryHook(
       const toolPairParsed = dependencies.parseToolPairMismatchError(props?.error)
       if (toolPairParsed) {
         dependencies.log("[auto-compact] tool_pair_mismatch detected", { sessionID })
+        const lastAssistant = await dependencies.getLastAssistant(
+          sessionID,
+          ctx.client,
+          ctx.directory,
+        )
+        const lastAssistantInfo = lastAssistant?.info
+        const providerID = typeof lastAssistantInfo?.providerID === "string"
+          ? lastAssistantInfo.providerID
+          : undefined
+        const modelID = typeof lastAssistantInfo?.modelID === "string"
+          ? lastAssistantInfo.modelID
+          : undefined
+
+        toolPairParsed.providerID ??= providerID
+        toolPairParsed.modelID ??= modelID
+        autoCompactState.pendingCompact.add(sessionID)
+        autoCompactState.errorDataBySession.set(sessionID, toolPairParsed)
         await dependencies.runToolPairRepairStrategy({
           sessionID,
           parsed: toolPairParsed,

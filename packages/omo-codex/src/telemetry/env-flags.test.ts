@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test"
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
 
 import { shouldDisablePostHog } from "./env-flags"
 
@@ -14,6 +14,10 @@ function clearTelemetryEnv(): void {
     delete process.env[envKey]
   }
 }
+
+beforeEach(() => {
+  clearTelemetryEnv()
+})
 
 afterEach(() => {
   clearTelemetryEnv()
