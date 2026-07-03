@@ -1,0 +1,11 @@
+[OK] DB ContentFilterError (exact stored shape)
+      classify=content_filter retryable=true statusCode=undefined
+      expected classify=content_filter retryable=true
+[OK] control: MessageAbortedError
+      classify=abort retryable=false statusCode=undefined
+      expected classify=abort retryable=false
+[OK] control: 400 ValidationError
+      classify=undefined retryable=false statusCode=400
+      expected classify=undefined retryable=false
+
+RESULT: PASS

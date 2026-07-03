@@ -1,0 +1,20 @@
+(pass) playwright browser skill facade > #given playwright MCP skill data #when inspected #then metadata and MCP frontmatter markers stay stable [0.13ms]
+(pass) playwright browser skill facade > #given agent-browser source markdown #when exposed through the split skill #then frontmatter is stripped and tool markers stay stable [0.33ms]
+(pass) playwright browser skill facade > #given agent-browser prompt sections #when reading the split template #then critical browser workflow order is preserved [0.20ms]
+
+packages/skills-loader-core/src/features/builtin-skills/skills/team-mode.test.ts:
+(pass) teamModeSkill gating > team-mode hidden when disabled [0.23ms]
+(pass) teamModeSkill gating > team-mode visible when enabled [0.16ms]
+(pass) teamModeSkill gating > team-mode skill has no mcpConfig [0.09ms]
+(pass) teamModeSkill gating > team-mode skill body keeps required keywords [0.16ms]
+(pass) teamModeSkill gating > team-mode skill separates lead-only and member-safe tools [0.26ms]
+
+2 tests skipped:
+(skip) team-mode live tmux smoke > #given a real caller tmux session and two mock members #when createTeamLayout runs #then teammate panes appear in the caller window and cleanup leaves the session intact
+(skip) team-mode live tmux smoke > #given a real caller tmux session and two mock members #when createTeamLayout runs #then teammate panes appear in the caller window and cleanup leaves the session intact
+
+ 10432 pass
+ 2 skip
+ 0 fail
+ 25355 expect() calls
+Ran 10434 tests across 1277 files. [146.20s]

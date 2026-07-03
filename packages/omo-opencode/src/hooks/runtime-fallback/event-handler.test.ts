@@ -343,4 +343,56 @@ describe("createEventHandler", () => {
     expect(advanced?.attemptCount).toBe(2)
     expect(advanced?.pendingFallbackModel).toBe("openai/gpt-5.5(medium)")
   })
+
+  it("#given a provider content-filter block #when session.error carries ContentFilterError #then the next fallback model is dispatched", async () => {
+    // given - the exact error shape OpenCode stores for a content-filter finish
+    // (name ContentFilterError, nested data.message, no status code). This used
+    // to be classified non-retryable, so no fallback ever fired.
+    const sessionID = "session-content-filter"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: [
+            { model: "anthropic/claude-opus-4-8", variant: "max" },
+            { model: "openai/gpt-5.5", variant: "medium" },
+          ],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    const dispatchedModels: string[] = []
+    const helpers = createHelpers(deps, [], [])
+    helpers.autoRetryWithFallback = async (_sessionID: string, model: string) => {
+      dispatchedModels.push(model)
+      return { accepted: true, status: "dispatched" }
+    }
+    deps.sessionStates.set(sessionID, createFallbackState("anthropic/claude-fable-5"))
+    const handler = createEventHandler(deps, helpers)
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "anthropic",
+          modelID: "claude-fable-5",
+          error: {
+            name: "ContentFilterError",
+            data: { message: "The response was blocked by the provider's content filter" },
+          },
+        },
+      },
+    })
+
+    // then - content-filter is now retryable and the first fallback model is dispatched
+    expect(dispatchedModels).toEqual(["anthropic/claude-opus-4-8(max)"])
+    expect(deps.sessionStates.get(sessionID)?.currentModel).toBe("anthropic/claude-opus-4-8(max)")
+  })
 })

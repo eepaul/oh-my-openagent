@@ -157,4 +157,54 @@ describe("runtime fallback error classifier", () => {
     //#then
     expect(signal).toEqual({ signal: retryInfo.summary })
   })
+
+  test("classifies provider content-filter blocks as a retryable content_filter error", () => {
+    //#given the exact error shape OpenCode stores for a content-filter finish
+    const cases = [
+      {
+        label: "opencode ContentFilterError with nested data.message",
+        error: {
+          name: "ContentFilterError",
+          data: { message: "The response was blocked by the provider's content filter" },
+        },
+        expectedType: "content_filter",
+        expectedRetryable: true,
+        expectedStatusCode: undefined,
+      },
+      {
+        label: "flat ContentFilterError name only",
+        error: {
+          name: "ContentFilterError",
+          message: "The response was blocked by the provider's content filter",
+        },
+        expectedType: "content_filter",
+        expectedRetryable: true,
+        expectedStatusCode: undefined,
+      },
+      {
+        label: "message pattern fallback when name is absent",
+        error: {
+          data: { error: { message: "Request was blocked by the content filter policy" } },
+        },
+        expectedType: "content_filter",
+        expectedRetryable: true,
+        expectedStatusCode: undefined,
+      },
+    ] as const
+
+    //#when
+    const results = cases.map(({ error, ...metadata }) => ({
+      ...metadata,
+      actualType: classifyRuntimeFallbackError(error),
+      actualRetryable: isRuntimeFallbackRetryableError(error, DEFAULT_RETRY_CODES),
+      actualStatusCode: getRuntimeFallbackStatusCode(error, DEFAULT_RETRY_CODES),
+    }))
+
+    //#then
+    for (const result of results) {
+      expect(result.actualType, result.label).toBe(result.expectedType)
+      expect(result.actualRetryable, result.label).toBe(result.expectedRetryable)
+      expect(result.actualStatusCode, result.label).toBe(result.expectedStatusCode)
+    }
+  })
 })

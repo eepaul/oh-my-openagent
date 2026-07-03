@@ -21,6 +21,7 @@ export type RuntimeFallbackErrorType =
   | "invalid_api_key"
   | "model_not_found"
   | "quota_exceeded"
+  | "content_filter"
   | "abort"
 
 export const RUNTIME_FALLBACK_RETRYABLE_ERROR_PATTERNS = [
@@ -125,6 +126,10 @@ export function classifyRuntimeFallbackError(error: unknown): RuntimeFallbackErr
     return "quota_exceeded"
   }
 
+  if (errorName?.includes("contentfiltererror") || /content.?filter/i.test(message)) {
+    return "content_filter"
+  }
+
   return undefined
 }
 
@@ -142,7 +147,8 @@ export function isRuntimeFallbackRetryableError(
   if (
     errorType === "missing_api_key" ||
     errorType === "model_not_found" ||
-    errorType === "quota_exceeded"
+    errorType === "quota_exceeded" ||
+    errorType === "content_filter"
   ) {
     return true
   }
