@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import type { AutoRetryHelpers } from "./auto-retry"
 import { createMessageUpdateHandler } from "./message-update-handler"
 import type { HookDeps, RuntimeFallbackPluginInput } from "./types"
+import { createFallbackState } from "./fallback-state"
 import { hasVisibleAssistantResponse } from "./visible-assistant-response"
 import { extractAutoRetrySignal } from "./error-classifier"
 import { SessionCategoryRegistry } from "../../shared/session-category-registry"
@@ -117,6 +118,11 @@ function createRuntimeFallbackDeps(operations: string[]): HookDeps {
     },
     options: undefined,
     pluginConfig: {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
       categories: {
         test: {
           fallback_models: ["litellm/openai.eu.gpt-5.5"],
@@ -143,6 +149,7 @@ function createRuntimeFallbackHelpers(deps: HookDeps, operations: string[]): Aut
     },
     clearSessionFallbackTimeout: () => {},
     scheduleSessionFallbackTimeout: () => {},
+    refreshSessionFallbackTimeout: () => {},
     autoRetryWithFallback: async (_sessionID: string, model: string) => {
       operations.push(`retry:${model}`)
       return { accepted: true, status: "dispatched" }
@@ -185,5 +192,42 @@ describe("createMessageUpdateHandler runtime fallback dispatch", () => {
       "toast",
     ])
     expect(deps.internallyAbortedSessions.has(sessionID)).toBe(true)
+  })
+
+  it("#given pending fallback has a variant #when message update reports the same model without variant #then it is treated as the awaited fallback", async () => {
+    // given
+    const sessionID = "session-message-variant-normalized-fallback"
+    const operations: string[] = []
+    SessionCategoryRegistry.register(sessionID, "test")
+    const deps = createRuntimeFallbackDeps(operations)
+    const state = createFallbackState("anthropic/claude-fable-5")
+    state.currentModel = "anthropic/claude-opus-4-8(max)"
+    state.fallbackIndex = 0
+    state.attemptCount = 1
+    state.pendingFallbackModel = "anthropic/claude-opus-4-8(max)"
+    deps.sessionStates.set(sessionID, state)
+    deps.sessionAwaitingFallbackResult.add(sessionID)
+    const handler = createMessageUpdateHandler(deps, createRuntimeFallbackHelpers(deps, operations))
+
+    // when
+    await handler({
+      sessionID,
+      info: {
+        role: "assistant",
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-opus-4-8",
+        },
+        error: {
+          name: "ProviderRateLimitError",
+          message: "The usage limit has been reached for this model.",
+        },
+      },
+    })
+
+    // then
+    expect(deps.sessionAwaitingFallbackResult.has(sessionID)).toBe(false)
+    expect(operations).toEqual([])
+    expect(deps.sessionStates.get(sessionID)?.pendingFallbackModel).toBe("anthropic/claude-opus-4-8(max)")
   })
 })

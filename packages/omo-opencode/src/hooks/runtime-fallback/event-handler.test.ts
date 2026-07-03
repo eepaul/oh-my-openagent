@@ -1,8 +1,9 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import type { HookDeps, RuntimeFallbackPluginInput } from "./types"
 import type { AutoRetryHelpers } from "./auto-retry"
 import { createFallbackState } from "./fallback-state"
 import { createEventHandler } from "./event-handler"
+import { SessionCategoryRegistry } from "../../shared/session-category-registry"
 
 function createContext(): RuntimeFallbackPluginInput {
   return {
@@ -33,7 +34,13 @@ function createDeps(): HookDeps {
       restore_primary_after_cooldown: false,
     },
     options: undefined,
-    pluginConfig: {},
+    pluginConfig: {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+    },
     sessionStates: new Map(),
     sessionLastAccess: new Map(),
     sessionRetryInFlight: new Set(),
@@ -55,13 +62,17 @@ function createHelpers(deps: HookDeps, abortCalls: string[], clearCalls: string[
     },
     scheduleSessionFallbackTimeout: () => {},
     refreshSessionFallbackTimeout: () => {},
-    autoRetryWithFallback: async () => {},
+    autoRetryWithFallback: async () => ({ accepted: true, status: "dispatched" }),
     resolveAgentForSessionFromContext: async () => undefined,
     cleanupStaleSessions: () => {},
   }
 }
 
 describe("createEventHandler", () => {
+  afterEach(() => {
+    SessionCategoryRegistry.clear()
+  })
+
   it("#given a session retry dedupe key #when session.stop fires #then the retry dedupe key is cleared", async () => {
     // given
     const sessionID = "session-stop"
@@ -105,7 +116,7 @@ describe("createEventHandler", () => {
     expect(deps.sessionStatusRetryKeys.has(sessionID)).toBe(false)
     expect(clearCalls).toEqual([sessionID])
     expect(abortCalls).toEqual([])
-    expect(state.pendingFallbackModel).toBe(undefined)
+    expect(state.pendingFallbackModel ?? "unset").toBe("unset")
   })
 
   it("#given a cancelled session #when session.error receives an abort error #then fallback retry state is reset", async () => {
@@ -240,7 +251,9 @@ describe("createEventHandler", () => {
     expect(deps.sessionStates.get(sessionID)?.attemptCount).toBe(1)
 
     // simulate the next retry signal advancing the counter
-    const advanced = deps.sessionStates.get(sessionID)!
+    const advanced = deps.sessionStates.get(sessionID)
+    expect(advanced).toBeDefined()
+    if (!advanced) return
     advanced.attemptCount = 2
 
     // iteration 2: another internal abort
@@ -274,5 +287,60 @@ describe("createEventHandler", () => {
     expect(created?.originalModel).toBe("openai/gpt-5.5-codex")
     expect(created?.currentModel).toBe("openai/gpt-5.5-codex")
     expect(typeof created?.currentModel).toBe("string")
+  })
+
+  it("#given pending fallback has a variant #when session.error reports the same model without variant #then fallback advances instead of being skipped", async () => {
+    // given
+    const sessionID = "session-error-variant-normalized-fallback"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: [
+            { model: "anthropic/claude-opus-4-8", variant: "max" },
+            { model: "openai/gpt-5.5", variant: "medium" },
+          ],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    const abortCalls: string[] = []
+    const clearCalls: string[] = []
+    const state = createFallbackState("anthropic/claude-fable-5")
+    state.currentModel = "anthropic/claude-opus-4-8(max)"
+    state.pendingFallbackModel = "anthropic/claude-opus-4-8(max)"
+    state.fallbackIndex = 0
+    state.attemptCount = 1
+    deps.sessionStates.set(sessionID, state)
+    deps.sessionAwaitingFallbackResult.add(sessionID)
+    const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "anthropic",
+          modelID: "claude-opus-4-8",
+          error: {
+            name: "ProviderRateLimitError",
+            message: "The usage limit has been reached for this model.",
+          },
+        },
+      },
+    })
+
+    // then
+    const advanced = deps.sessionStates.get(sessionID)
+    expect(advanced?.currentModel).toBe("openai/gpt-5.5(medium)")
+    expect(advanced?.fallbackIndex).toBe(1)
+    expect(advanced?.attemptCount).toBe(2)
+    expect(advanced?.pendingFallbackModel).toBe("openai/gpt-5.5(medium)")
   })
 })

@@ -1,7 +1,12 @@
 /// <reference types="bun-types" />
 
 import { describe, expect, test } from "bun:test"
-import { createFallbackState, findNextAvailableFallback, stringifyRuntimeModelWithVariant } from "./fallback-state"
+import {
+  areRuntimeModelsEquivalent,
+  createFallbackState,
+  findNextAvailableFallback,
+  stringifyRuntimeModelWithVariant,
+} from "./fallback-state"
 
 describe("runtime-fallback fallback state", () => {
   test("#given object-shaped current model #when finding the next fallback #then equivalent models are skipped without crashing", () => {
@@ -14,6 +19,30 @@ describe("runtime-fallback fallback state", () => {
 
     // then
     expect(nextModel).toBe("openai/gpt-5.4")
+  })
+
+  test("#given current model without variant #when fallback chain starts with the same model plus variant #then it advances to the next provider", () => {
+    // given
+    const state = createFallbackState("anthropic/claude-opus-4-8")
+    const fallbackModels = ["anthropic/claude-opus-4-8(max)", "openai/gpt-5.5(medium)"]
+
+    // when
+    const nextModel = findNextAvailableFallback(state, fallbackModels, 60)
+
+    // then
+    expect(nextModel).toBe("openai/gpt-5.5(medium)")
+  })
+
+  test("#given runtime fallback model differs only by variant #when comparing models #then they are equivalent", () => {
+    // given
+    const candidate = "anthropic/claude-opus-4-8(max)"
+    const current = "anthropic/claude-opus-4-8"
+
+    // when
+    const equivalent = areRuntimeModelsEquivalent(candidate, current)
+
+    // then
+    expect(equivalent).toBe(true)
   })
 
   test("#given model object without variant and top-level variant #when stringifying runtime model #then top-level variant is preserved", () => {

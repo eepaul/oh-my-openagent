@@ -1,7 +1,7 @@
 import type { HookDeps } from "./types"
 import { HOOK_NAME } from "./constants"
 import { log } from "../../shared/logger"
-import { createFallbackState, isModelInCooldown } from "./fallback-state"
+import { areRuntimeModelsEquivalent, createFallbackState, isModelInCooldown } from "./fallback-state"
 
 export function createChatMessageHandler(deps: HookDeps) {
   const { config, sessionStates, sessionLastAccess } = deps
@@ -23,26 +23,28 @@ export function createChatMessageHandler(deps: HookDeps) {
       ? `${input.model.providerID}/${input.model.modelID}`
       : undefined
 
-    if (requestedModel && requestedModel !== state.currentModel) {
-      if (state.pendingFallbackModel && state.pendingFallbackModel === requestedModel) {
+    if (requestedModel) {
+      if (state.pendingFallbackModel && areRuntimeModelsEquivalent(state.pendingFallbackModel, requestedModel)) {
         state.pendingFallbackModel = undefined
         state.pendingFallbackPromptMayHaveBeenAccepted = false
         return
       }
 
-      log(`[${HOOK_NAME}] Detected manual model change, resetting fallback state`, {
-        sessionID,
-        from: state.currentModel,
-        to: requestedModel,
-      })
-      state = createFallbackState(requestedModel)
-      sessionStates.set(sessionID, state)
-      return
+      if (!areRuntimeModelsEquivalent(requestedModel, state.currentModel)) {
+        log(`[${HOOK_NAME}] Detected manual model change, resetting fallback state`, {
+          sessionID,
+          from: state.currentModel,
+          to: requestedModel,
+        })
+        state = createFallbackState(requestedModel)
+        sessionStates.set(sessionID, state)
+        return
+      }
     }
 
     if (
       config.restore_primary_after_cooldown &&
-      state.currentModel !== state.originalModel &&
+      !areRuntimeModelsEquivalent(state.currentModel, state.originalModel) &&
       !state.pendingFallbackModel &&
       !isModelInCooldown(state.originalModel, state, config.cooldown_seconds)
     ) {
@@ -66,7 +68,7 @@ export function createChatMessageHandler(deps: HookDeps) {
 
     const activeModel = state.currentModel
 
-    if (activeModel === state.originalModel) return
+    if (areRuntimeModelsEquivalent(activeModel, state.originalModel)) return
 
     log(`[${HOOK_NAME}] Applying fallback model override`, {
       sessionID,

@@ -3,7 +3,7 @@ import type { AutoRetryHelpers } from "./auto-retry"
 import { HOOK_NAME } from "./constants"
 import { log } from "../../shared/logger"
 import { extractStatusCode, extractErrorName, classifyErrorType, isRetryableError, extractAutoRetrySignal, containsErrorContent } from "./error-classifier"
-import { createFallbackState } from "./fallback-state"
+import { areRuntimeModelsEquivalent, createFallbackState } from "./fallback-state"
 import { getFallbackModelsForSession } from "./fallback-models"
 import { resolveFallbackBootstrapModel } from "./fallback-bootstrap-model"
 import { dispatchFallbackRetry } from "./fallback-retry-dispatcher"
@@ -77,7 +77,7 @@ export function createMessageUpdateHandler(deps: HookDeps, helpers: AutoRetryHel
         wasAwaitingFallbackResult &&
         pendingFallbackModel &&
         !retrySignal &&
-        model !== pendingFallbackModel
+        !areRuntimeModelsEquivalent(model, pendingFallbackModel)
       ) {
         log(`[${HOOK_NAME}] message.updated fallback skipped - awaiting fallback result`, {
           sessionID,
