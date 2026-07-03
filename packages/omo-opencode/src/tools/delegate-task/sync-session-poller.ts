@@ -7,7 +7,7 @@ import { normalizeSDKResponse } from "../../shared"
 
 export { isSessionComplete } from "./sync-session-turns"
 
-const ACTIVE_SESSION_STATUSES = new Set(["busy", "retry", "running"])
+const ACTIVE_SESSION_STATUSES = new Set(["busy", "running"])
 const CHILD_WAKE_GRACE_MS = 5_000
 
 function wait(milliseconds: number): Promise<void> {

@@ -105,7 +105,7 @@ describe("syncPollTimeoutMs threading", () => {
             status: async () => {
               statusCallCount++
               if (statusCallCount === 1) return { data: { ses_active: { type: "busy" } } }
-              if (statusCallCount === 2) return { data: { ses_active: { type: "retry" } } }
+              if (statusCallCount === 2) return { data: { ses_active: { type: "running" } } }
               return { data: { ses_active: { type: "idle" } } }
             },
           },
@@ -123,6 +123,41 @@ describe("syncPollTimeoutMs threading", () => {
           expect(abortCount).toBe(0)
           expect(statusCallCount).toBe(3)
           expect(messageCallCount).toBe(1)
+        })
+      })
+
+      test("#then retry status without message progress consumes the inactivity timeout", async () => {
+        const { pollSyncSession } = require("./sync-session-poller")
+        let abortCount = 0
+        let messageCallCount = 0
+        const mockClient = {
+          session: {
+            abort: async () => {
+              abortCount++
+            },
+            messages: async () => {
+              messageCallCount++
+              return {
+                data: [
+                  { info: { id: "msg_001", role: "user", time: { created: 1000 } } },
+                ],
+              }
+            },
+            status: async () => ({ data: { ses_retry_stalled: { type: "retry" } } }),
+          },
+        }
+
+        await withMockedDateNow(60_000, async () => {
+          const result = await pollSyncSession(createMockCtx(), mockClient, {
+            sessionID: "ses_retry_stalled",
+            agentToUse: "plan",
+            toastManager: null,
+            taskId: undefined,
+          }, 120_000)
+
+          expect(result).toBe("Poll inactivity timeout reached after 120000ms without active OpenCode status for session ses_retry_stalled")
+          expect(abortCount).toBe(1)
+          expect(messageCallCount).toBeGreaterThan(0)
         })
       })
     })
