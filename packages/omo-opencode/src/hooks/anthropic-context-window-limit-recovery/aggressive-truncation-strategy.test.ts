@@ -86,7 +86,7 @@ function createAutoCompactState(): AutoCompactState {
 }
 
 async function flushDeferredPrompt(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 600))
+  await new Promise((resolve) => setTimeout(resolve, 60))
 }
 
 describe("runAggressiveTruncationStrategy - pins agent/model/variant on recovered promptAsync", () => {
@@ -118,6 +118,7 @@ describe("runAggressiveTruncationStrategy - pins agent/model/variant on recovere
       truncateAttempt: 0,
       currentTokens: 250_000,
       maxTokens: 200_000,
+      deferPromptMs: 10,
     })
     await flushDeferredPrompt()
 
@@ -151,6 +152,7 @@ describe("runAggressiveTruncationStrategy - pins agent/model/variant on recovere
       truncateAttempt: 0,
       currentTokens: 250_000,
       maxTokens: 200_000,
+      deferPromptMs: 10,
     })
     await flushDeferredPrompt()
 
@@ -176,6 +178,7 @@ describe("runAggressiveTruncationStrategy - pins agent/model/variant on recovere
       truncateAttempt: 0,
       currentTokens: 250_000,
       maxTokens: 200_000,
+      deferPromptMs: 10,
     })
     await flushDeferredPrompt()
 
@@ -205,6 +208,7 @@ describe("runAggressiveTruncationStrategy - pins agent/model/variant on recovere
       truncateAttempt: 0,
       currentTokens: 250_000,
       maxTokens: 200_000,
+      deferPromptMs: 10,
     })
     await flushDeferredPrompt()
 
