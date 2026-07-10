@@ -24,6 +24,7 @@ export function createAutoRetryDispatcher(
     sessionStates,
     sessionRetryInFlight,
     sessionAwaitingFallbackResult,
+    internallyAbortedSessions,
     pluginConfig,
   } = deps
 
@@ -116,6 +117,9 @@ export function createAutoRetryDispatcher(
         },
         query: { directory: ctx.directory },
       }
+      // Our own abort leaves a dangling assistant turn with no terminal error, which
+      // the gate's assistant-active check would treat as blocking forever. Skip it.
+      const wasInternallyAborted = internallyAbortedSessions.has(sessionID)
       const dispatchRetryPrompt = (retrySource: string, queueBehavior?: "defer") => dispatchInternalPrompt({
         mode: "async",
         client: ctx.client,
@@ -132,7 +136,7 @@ export function createAutoRetryDispatcher(
         // active sessions (upstream #5109) the guard correctly queues the
         // dispatch. Any dangling tool state is reconciled by the session-recovery
         // tool_result_missing hook.
-        checkToolState: !deps.internallyAbortedSessions.has(sessionID),
+        checkToolState: !wasInternallyAborted,
         input: retryPromptInput,
       })
 

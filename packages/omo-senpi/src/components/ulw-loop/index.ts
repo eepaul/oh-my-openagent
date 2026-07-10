@@ -91,10 +91,30 @@ export function createUlwLoopComponent(options: UlwLoopComponentOptions = {}): O
 
         state.previousStatusRaw = status.raw
         state.consecutiveContinuations += 1
-        pi.sendUserMessage(CONTINUATION_PROMPT, { deliverAs: "followUp" })
+        deliverContinuation(pi, ctx)
       })
     },
   }
+}
+
+const ULW_CONTINUATION_INJECTION_KEY = "omo-senpi-ulw-loop-continuation"
+
+// Route the continuation through the idle-injection coordinator when the composition provides one, so
+// a task completion and this continuation on the same idle edge collapse to a single wake. The
+// continuation only enqueues then requests a DEFERRED flush: a synchronous completion wake on the same
+// idle edge drains the shared queue first and carries the continuation with it, so the deferred pass
+// no-ops. Falls back to a direct followUp when no coordinator is wired (isolated unit context).
+function deliverContinuation(pi: SenpiExtensionAPI, ctx: ComponentContext): void {
+  if (ctx.idleCoordinator !== undefined) {
+    ctx.idleCoordinator.enqueue({
+      key: ULW_CONTINUATION_INJECTION_KEY,
+      source: "ulw-continuation",
+      content: CONTINUATION_PROMPT,
+    })
+    ctx.idleCoordinator.scheduleFlush()
+    return
+  }
+  pi.sendUserMessage(CONTINUATION_PROMPT, { deliverAs: "followUp" })
 }
 
 function resolveOmoBin(): string | null {
@@ -103,28 +123,46 @@ function resolveOmoBin(): string | null {
   return findExecutableOnPath("omo")
 }
 
+const OMO_COMMAND_TIMEOUT_MS = 30_000
+
 async function runOmoCommand(
   bin: string,
   args: readonly string[],
   options: { cwd: string },
 ): Promise<{ code: number; stdout: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(bin, [...args], {
-      cwd: options.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-
-    const stdoutChunks: Buffer[] = []
-    child.stdout.on("data", (chunk) => {
-      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
-    })
-    child.on("error", () => {
-      resolve({ code: 1, stdout: Buffer.concat(stdoutChunks).toString("utf8") })
-    })
-    child.on("close", (code) => {
-      resolve({ code: code ?? 1, stdout: Buffer.concat(stdoutChunks).toString("utf8") })
-    })
+  const { promise, resolve } = Promise.withResolvers<{ code: number; stdout: string }>()
+  // stderr is never consumed: piping it would wedge the child forever once the
+  // 64KiB pipe buffer fills (observed as thousands of live `omo ulw-loop status`
+  // processes). Inherit-discard it and hard-kill the child on timeout instead.
+  const child = spawn(bin, [...args], {
+    cwd: options.cwd,
+    stdio: ["ignore", "pipe", "ignore"],
   })
+
+  const stdoutChunks: Buffer[] = []
+  let settled = false
+  const settle = (result: { code: number; stdout: string }): void => {
+    if (settled) return
+    settled = true
+    clearTimeout(timeout)
+    resolve(result)
+  }
+  const timeout = setTimeout(() => {
+    child.kill("SIGKILL")
+    settle({ code: 1, stdout: Buffer.concat(stdoutChunks).toString("utf8") })
+  }, OMO_COMMAND_TIMEOUT_MS)
+  timeout.unref?.()
+
+  child.stdout.on("data", (chunk) => {
+    stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+  })
+  child.on("error", () => {
+    settle({ code: 1, stdout: Buffer.concat(stdoutChunks).toString("utf8") })
+  })
+  child.on("close", (code) => {
+    settle({ code: code ?? 1, stdout: Buffer.concat(stdoutChunks).toString("utf8") })
+  })
+  return promise
 }
 
 async function readActiveStatus(

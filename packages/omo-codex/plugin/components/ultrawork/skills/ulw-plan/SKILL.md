@@ -67,6 +67,19 @@ Fan out read-only research before deciding. Every spawn names DELIVERABLE / SCOP
 multi_agent_v1.spawn_agent({"message":"TASK: act as an explorer. DELIVERABLE: ... SCOPE: ... VERIFY: ...","agent_type":"explorer","fork_context":false})
 ```
 
+If your tool list has a flat `spawn_agent` with a required `task_name` instead of `multi_agent_v1.*` (`multi_agent_v2`), rewrite: add `"task_name":"<lowercase_digits_underscores>"`, replace `"fork_context":false` with `"fork_turns":"none"`, and `wait_agent` takes only `timeout_ms`, returning on any child mailbox activity (finished agents end on their own).
+
+Spawn every independent child for the current wave first. After the wave
+is launched, use `multi_agent_v1.wait_agent` for each child until each
+reaches terminal status. A timeout is not terminal status. Do not start dependent planning, drafting, approval-gate work, or final handoff until each child result is integrated or recorded as inconclusive.
+
+For work likely to exceed one wait cycle, require the child to send
+`WORKING: <task> - <current phase>` before long passes and
+`BLOCKED: <reason>` only when progress stops. A `multi_agent_v1.wait_agent`
+timeout only means no new mailbox update arrived. Treat a running child as
+alive. Fallback only when the child is completed without the deliverable,
+ack-only after followup, explicitly `BLOCKED:`, or no longer running.
+
 Roles: `explorer` (internal patterns/conventions/tests), `librarian` (external docs/contracts), `metis` (gap analysis), `momus` (high-accuracy plan review). Full spawn/wait/fallback discipline is in `references/full-workflow.md`.
 
 ## Stop rules

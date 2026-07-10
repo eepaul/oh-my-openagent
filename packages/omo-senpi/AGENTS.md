@@ -2,7 +2,7 @@
 
 Native Senpi TypeScript extension adapter for oh-my-openagent.
 
-This package is adapter-only. It may depend on harness-neutral core packages, but core packages must not import Senpi, Pi packages, or this adapter. The Senpi runtime boundary stays here.
+This package is adapter-only. It may depend on harness-neutral core packages plus the Senpi-coupled `@oh-my-opencode/senpi-task` engine, but those packages must not import Senpi, Pi packages, or this adapter through their harness-neutral entrypoints. The Senpi runtime boundary stays here.
 
 ## Anatomy
 
@@ -10,7 +10,7 @@ This package is adapter-only. It may depend on harness-neutral core packages, bu
 |------|---------|
 | `package.json` | Private workspace package `@oh-my-opencode/omo-senpi`; exports the adapter, extension, and local installer entrypoints. |
 | `src/extension/` | Senpi ExtensionAPI composition layer. It validates the required API surface, registers global and per-component disable flags, and wires components defensively. |
-| `src/components/` | Five live components: `ultrawork`, `ulw-loop`, `comment-checker`, `telemetry`, and `lsp`. |
+| `src/components/` | Six live components: `ultrawork`, `ulw-loop`, `comment-checker`, `telemetry`, `lsp`, and `task`. |
 | `src/install/` | Local Senpi installer and uninstaller helpers. They add or remove the absolute plugin path in `SENPI_CODING_AGENT_DIR` or `~/.senpi/agent` settings. |
 | `scripts/qa/` | Live Senpi QA drivers, continuation probe, and mock provider used by task 13 validation. |
 | `plugin/` | The single Pi package `@code-yeongyu/omo-senpi`. It contains generated `extensions/omo.js`, generated skills, package metadata, and plugin-local build scripts. |
@@ -24,8 +24,19 @@ The v1 install surface is local-path only. Install the built Pi package from `pa
 - `comment-checker`: runs the shared comment-checker flow after write-like tool results when a resolver finds the binary.
 - `telemetry`: sends the anonymous once-per-UTC-day `omo_senpi_daily_active` event, with product-specific opt-outs.
 - `lsp`: registers direct LSP tools and optional post-edit diagnostics using the vendored Senpi LSP client adaptation.
+- `task`: loads `omo.json` at register (`loadOmoConfig`, `src/components/task/index.ts:57`), composes the task engine over `@oh-my-opencode/senpi-task`, and registers the 4 task tools (`task`, `task_send`, `task_cancel`, `task_output`, `index.ts:106`) plus the 6 lead-only team tools (`team_create`, `team_delete`, `task_create`, `task_get`, `task_list`, `task_update`, via `buildLeadTeamTools`, `index.ts:122`). Member children receive a pre-scoped `task_send` for team messages. It wires the session lifecycle (`session_start` reconcile + buffer flush, `session_before_switch`/`before_compact` transition marking, `session_shutdown` teardown, `model_select` registry refresh, `index.ts:151`), a completion-message renderer, the `/tasks` and `/task-kill` slash commands (`src/components/task/commands.ts:30`), and the status-UI footer. Gated by the `--no-omo-task` flag and skipped when required ExtensionAPI capabilities are missing (`index.ts:45`).
+
+`packages/omo-opencode` is a separate build that still uses its prior task/team names; cross-edition parity is a deliberate follow-up outside this adapter.
 
 Rules are intentionally not a Senpi component. Senpi has builtin rules, so this adapter must not add a `rules` component just to mirror Codex or OpenCode.
+
+### Dependencies
+
+The adapter depends on `@oh-my-opencode/senpi-task` (task engine + tool factories), `@oh-my-opencode/omo-config-core` (`loadOmoConfig` + `OmoConfigSource`), `@oh-my-opencode/delegate-core`, `@oh-my-opencode/team-core`, `@oh-my-opencode/comment-checker-core`, `@oh-my-opencode/telemetry-core`, `@oh-my-opencode/prompts-core`, `@oh-my-opencode/utils`, and `vscode-jsonrpc`, with `@code-yeongyu/senpi` as an optional peer (`package.json`).
+
+### omo.json coexistence
+
+When a project carries BOTH an opencode-family config and a `.omo/omo.json` (or `.jsonc`) that contributed to the loaded config, the task component emits a one-time `DUAL_CONFIG_WARNING` on first `session_start` (`src/components/task/coexistence.ts:6`): senpi reads `.omo/omo.json` only for categories and agents; the opencode config is ignored for tasks. There is no automatic migration between the two files today. Full schema and precedence reference: [`docs/reference/omo-json.md`](../../docs/reference/omo-json.md).
 
 ## Build And Packaging
 
@@ -48,15 +59,20 @@ tsgo --noEmit -p packages/omo-senpi/tsconfig.json
 bun run test:senpi
 ```
 
-Task 13 live QA scripts:
+Task live QA scripts:
 
 ```sh
 node packages/omo-senpi/scripts/qa/drive.mjs --self-test
 node packages/omo-senpi/scripts/qa/drive.mjs
 node packages/omo-senpi/scripts/qa/probe-continuation.mjs
+SENPI_BIN="$(command -v senpi)" node packages/omo-senpi/scripts/qa/task-e2e.mjs
+SENPI_BIN="$(command -v senpi)" node packages/omo-senpi/scripts/qa/team-e2e.mjs
+node packages/omo-senpi/scripts/qa/task-rpc-e2e.mjs --self-test
 ```
 
-`drive.mjs` creates an isolated Senpi agent directory and ignores caller `SENPI_CODING_AGENT_DIR`. If the Senpi binary is unavailable, the live driver reports `SKIP` or `FAIL` in its final JSON instead of touching the real `~/.senpi/agent`.
+`drive.mjs` and the task/team live drivers create isolated Senpi agent directories and ignore caller `SENPI_CODING_AGENT_DIR`. If the Senpi binary is unavailable, the live drivers report `SKIP` or `FAIL` in final JSON instead of touching the real `~/.senpi/agent`.
+
+Task-component QA in this package: `packages/omo-senpi/scripts/qa/task-13.test.ts` exercises the task engine wiring, `task-e2e.mjs` covers the task-family live lifecycle, `team-e2e.mjs` covers the team lifecycle and shutdown-via-`task_send`, and `task-rpc-e2e.mjs --self-test` pins the RPC driver scripts. The `@oh-my-opencode/senpi-task` unit + chaos suites (`bun test packages/senpi-task`) cover the state machine, runners, and completion invariants. The task engine's own standalone manual drivers live under `packages/senpi-task/scripts/` (see [`packages/senpi-task/AGENTS.md`](../senpi-task/AGENTS.md)).
 
 ## Evidence Rules
 
