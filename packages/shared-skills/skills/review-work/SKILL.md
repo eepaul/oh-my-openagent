@@ -1,6 +1,6 @@
 ---
 name: review-work
-description: "Post-implementation review orchestrator. Launches 5 parallel background sub-agents: Oracle (goal/constraint verification), Oracle (code quality), Oracle (security), unspecified-high (hands-on QA execution), unspecified-high (context mining from GitHub/git/Slack/Notion). All must pass for review to pass. MUST USE after completing any significant implementation work. Triggers: 'review work', 'review my work', 'review changes', 'QA my work', 'verify implementation', 'check my work', 'validate changes', 'post-implementation review'."
+description: "Post-implementation review orchestrator. Launches 5 parallel background sub-agents: Oracle (goal/constraint verification), Oracle (code quality), Oracle (security), unspecified-high (hands-on QA execution), unspecified-high (context mining from GitHub/git/Slack/Notion). All must pass for review to pass. MUST USE before a PR handoff or when the user explicitly asks to review completed work. Triggers: 'review work', 'review my work', 'review changes', 'QA my work', 'verify implementation', 'check my work', 'validate changes', 'post-implementation review'."
 ---
 ## Codex Harness Tool Compatibility
 
@@ -14,7 +14,7 @@ This skill may include examples copied from the OpenCode harness. In Codex, do n
 | `task(subagent_type="oracle", ...)` for final verification | `multi_agent_v1.spawn_agent({"message":"TASK: act as a rigorous reviewer. ...","agent_type":"lazycodex-gate-reviewer","fork_context":false})` |
 | `task(category="...", ...)` for implementation or QA | `multi_agent_v1.spawn_agent({"message":"TASK: act as an implementation or QA worker. ...","fork_context":false})` |
 | `background_output(task_id="...")` | `multi_agent_v1.wait_agent(...)` for mailbox signals |
-| `team_*(...)` | Use Codex native subagents via `multi_agent_v1.spawn_agent`, `multi_agent_v1.send_input`, `multi_agent_v1.wait_agent`, and `multi_agent_v1.close_agent` |
+| `team_*(...)` | Use Codex native subagents via `multi_agent_v1.spawn_agent` and `multi_agent_v1.wait_agent`; use `multi_agent_v1.send_input` and `multi_agent_v1.close_agent` only when exposed in the active tools list |
 
 Role-specific behavior must be described in a self-contained `message`. Use `fork_context: false` to start the child with only the initial prompt (no parent history); use `fork_context: true` only when full parent history is truly required. Include any required conversation context, files, diffs, constraints, and requested skill names directly in the spawned agent's `message`. OMO installs these selectable agent roles into `~/.codex/agents/`: `explorer`, `librarian`, `plan`, `momus`, `metis`, `lazycodex-code-reviewer`, `lazycodex-qa-executor`, and `lazycodex-gate-reviewer` — pass the matching name as `agent_type` so the child gets that role's model and instructions. If the spawn tool exposes no `agent_type` parameter, omit it and describe the role inside `message`. If a code block below conflicts with this section, this section wins.
 
@@ -31,7 +31,13 @@ handoff. Role or specialty instructions belong inside `message`.
 Use `fork_context: false` unless full history is truly
 required; paste only the review context that worker needs.
 
-Plan and reviewer agents may run for a long time; spawn them in the background, keep doing independent root work, and poll with short `multi_agent_v1.wait_agent` cycles sized to the work. Never use a single long blocking wait for them, and never spin on tiny timeouts as a failure budget.
+Review lanes are leaf agents: a lane does its own reading, running, and
+judging inline and never spawns sub-reviewers of its own. Reviewers are
+one-shot: a lane ends at its verdict; a re-review after fixes is a fresh
+spawn scoped to the delta plus current evidence, never a `followup_task`
+to a long-lived reviewer carrying stale context.
+
+Plan and reviewer agents may run for a long time; spawn them in the background and keep doing independent root work. Between `multi_agent_v1.wait_agent` calls, back off — double the timeout up to ~5 minutes — instead of spinning short cycles.
 
 Treat child status as a progress signal, not a timeout counter. For
 work likely to exceed one wait cycle, require the child to send
@@ -224,6 +230,8 @@ task(
 </run_command>
 
 You are a QA engineer. Your job is to RUN the application and verify it works through hands-on testing. You do not review code - you test behavior.
+
+If the orchestrator already ran the `visual-qa` dual-oracle gate on this same build, consume that verdict instead of re-running it - your lane covers hands-on behavior the visual gate does not.
 
 MANDATORY PROCESS (follow in order):
 

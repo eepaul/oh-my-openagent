@@ -26,6 +26,11 @@ export const CATEGORY_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
         variant: "xhigh",
       },
       {
+        providers: ["github-copilot"],
+        model: "gpt-5.6-sol",
+        variant: "high",
+      },
+      {
         providers: ["openai", "opencode", "vercel"],
         model: "gpt-5.5",
         variant: "xhigh",
@@ -47,6 +52,16 @@ export const CATEGORY_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
     fallbackChain: [
       {
         providers: ["openai", "vercel"],
+        model: "gpt-5.6-terra",
+        variant: "xhigh",
+      },
+      {
+        providers: ["github-copilot"],
+        model: "gpt-5.6-terra",
+        variant: "high",
+      },
+      {
+        providers: ["openai", "github-copilot", "vercel"],
         model: "gpt-5.6-sol",
         variant: "high",
       },
@@ -108,6 +123,16 @@ export const CATEGORY_MODEL_REQUIREMENTS: Record<string, ModelRequirement> = {
   },
   "unspecified-low": {
     fallbackChain: [
+      {
+        providers: ["openai", "vercel"],
+        model: "gpt-5.6-luna",
+        variant: "xhigh",
+      },
+      {
+        providers: ["github-copilot"],
+        model: "gpt-5.6-luna",
+        variant: "high",
+      },
       {
         providers: ["anthropic", "github-copilot", "opencode", "vercel"],
         model: "claude-sonnet-4-6",

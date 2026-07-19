@@ -632,26 +632,23 @@ describe("migrateModelVersions", () => {
     expect(sisyphus.temperature).toBe(0.1)
   })
 
-  test("#given a config with explicit gpt-5.5 (#3777) #when migrating #then only entry-scoped defaults move", () => {
-    // given: sisyphus explicitly picked gpt-5.5; hephaestus carries the old installer default
-    const agents = {
-      sisyphus: { model: "openai/gpt-5.5", variant: "medium" },
-      hephaestus: {
-        model: "openai/gpt-5.5",
-        fallback_models: [{ model: "openai/gpt-5.5" }],
-      },
+  test("#given explicit gpt-5.5 pins on current entries (#3777) #when migrating #then preserves every user choice", () => {
+    // given: current agent and category entries explicitly select gpt-5.5
+    const configs = {
+      hephaestus: { model: "openai/gpt-5.5", variant: "medium" },
+      momus: { model: "openai/gpt-5.5", variant: "xhigh" },
+      deep: { model: "openai/gpt-5.5", variant: "medium" },
+      ultrabrain: { model: "openai/gpt-5.5", variant: "xhigh" },
     }
 
     // when: Migrate model versions
-    const { migrated, changed, newMigrations } = migrateModelVersions(agents)
+    const { migrated, changed, newMigrations } = migrateModelVersions(configs)
 
-    // then: global gpt-5.5 rewrites stay forbidden (#3777); only the scoped
-    // hephaestus default rollout applies, one-shot and revertible via sidecar
-    expect(changed).toBe(true)
-    expect(newMigrations).toEqual(["model-version:hephaestus:openai/gpt-5.5->openai/gpt-5.6-sol"])
+    // then: current models remain user-selectable and no entry name implies provenance
+    expect(changed).toBe(false)
+    expect(newMigrations).toEqual([])
     expect(MODEL_VERSION_MAP["openai/gpt-5.5"]).toBeUndefined()
-    expect((migrated["sisyphus"] as Record<string, unknown>).model).toBe("openai/gpt-5.5")
-    expect((migrated["hephaestus"] as Record<string, unknown>).model).toBe("openai/gpt-5.6-sol")
+    expect(migrated).toEqual(configs)
   })
 
   test("#given current Anthropic models from bundled snapshot #when migrating #then preserves explicit user choices", () => {
@@ -827,65 +824,6 @@ describe("migrateModelVersions", () => {
     expect((migrated["sisyphus"] as Record<string, unknown>).model).toBe("openai/gpt-5.4-codex")
   })
 
-  test("migrates hephaestus gpt-5.5 pin to gpt-5.6-sol preserving variant", () => {
-    // given: hephaestus pinned to the previous default, oracle pinned to the same model
-    const agents = {
-      hephaestus: { model: "openai/gpt-5.5", variant: "medium" },
-      oracle: { model: "openai/gpt-5.5", variant: "high" },
-    }
-
-    // when
-    const { migrated, changed, newMigrations } = migrateModelVersions(agents)
-
-    // then: only hephaestus moves; oracle's pin is untouched
-    expect(changed).toBe(true)
-    expect(newMigrations).toEqual(["model-version:hephaestus:openai/gpt-5.5->openai/gpt-5.6-sol"])
-    const hephaestus = migrated["hephaestus"] as Record<string, unknown>
-    expect(hephaestus.model).toBe("openai/gpt-5.6-sol")
-    expect(hephaestus.variant).toBe("medium")
-    const oracle = migrated["oracle"] as Record<string, unknown>
-    expect(oracle.model).toBe("openai/gpt-5.5")
-  })
-
-  test("migrates deep and ultrabrain gpt-5.5 pins to gpt-5.6-sol with new default variants", () => {
-    // given: categories pinned to the previous defaults
-    const categories = {
-      deep: { model: "openai/gpt-5.5", variant: "medium" },
-      ultrabrain: { model: "openai/gpt-5.5", variant: "xhigh" },
-    }
-
-    // when
-    const { migrated, changed, newMigrations } = migrateModelVersions(categories)
-
-    // then
-    expect(changed).toBe(true)
-    expect(newMigrations).toEqual([
-      "model-version:deep:openai/gpt-5.5->openai/gpt-5.6-sol",
-      "model-version:ultrabrain:openai/gpt-5.5->openai/gpt-5.6-sol",
-    ])
-    const deep = migrated["deep"] as Record<string, unknown>
-    expect(deep.model).toBe("openai/gpt-5.6-sol")
-    expect(deep.variant).toBe("high")
-    const ultrabrain = migrated["ultrabrain"] as Record<string, unknown>
-    expect(ultrabrain.model).toBe("openai/gpt-5.6-sol")
-    expect(ultrabrain.variant).toBe("xhigh")
-  })
-
-  test("skips already-applied scoped migration so user reverts stick", () => {
-    // given: user reverted hephaestus back to gpt-5.5 after the migration ran once
-    const agents = {
-      hephaestus: { model: "openai/gpt-5.5", variant: "medium" },
-    }
-    const appliedMigrations = new Set(["model-version:hephaestus:openai/gpt-5.5->openai/gpt-5.6-sol"])
-
-    // when
-    const { migrated, changed, newMigrations } = migrateModelVersions(agents, appliedMigrations)
-
-    // then
-    expect(changed).toBe(false)
-    expect(newMigrations).toHaveLength(0)
-    expect((migrated["hephaestus"] as Record<string, unknown>).model).toBe("openai/gpt-5.5")
-  })
 })
 
 describe("migrateConfigFile _migrations tracking", () => {

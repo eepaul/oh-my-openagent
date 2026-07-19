@@ -1,28 +1,15 @@
-import { afterAll, describe, it, expect, mock, beforeEach } from "bun:test"
-import { preserveModuleMocksForTestFile, restoreModuleMocksForTestFile } from "../../testing/module-mock-lifecycle"
-
-mock.restore()
+import { describe, it, expect, mock, beforeEach } from "bun:test"
+import { fixEmptyMessagesWithSDK as fixEmptyMessagesWithSDKImpl } from "./empty-content-recovery-sdk"
 
 const mockReplaceEmptyTextParts = mock(() => Promise.resolve(false))
 const mockInjectTextPart = mock(() => Promise.resolve(false))
-const mockFindEmptyTextPartsFromSDK = mock(() => Promise.resolve([] as string[]))
-
-mock.module("./storage/empty-text", () => ({
+const storage = {
   replaceEmptyTextPartsAsync: mockReplaceEmptyTextParts,
-  findMessagesWithEmptyTextPartsFromSDK: mockFindEmptyTextPartsFromSDK,
-}))
-mock.module("./storage/text-part-injector", () => ({
+  findMessagesWithEmptyTextPartsFromSDK: () => Promise.resolve([]),
   injectTextPartAsync: mockInjectTextPart,
-}))
-
-preserveModuleMocksForTestFile(import.meta.url)
-
-const emptyContentRecoveryModulePromise = import("./empty-content-recovery-sdk")
-
-afterAll(() => {
-  restoreModuleMocksForTestFile(import.meta.url)
-  mock.restore()
-})
+}
+const fixEmptyMessagesWithSDK = (params: Parameters<typeof fixEmptyMessagesWithSDKImpl>[0]) =>
+  fixEmptyMessagesWithSDKImpl(params, storage)
 
 function createMockClient(messages: Array<{ info?: { id?: string }; parts?: Array<{ type?: string; text?: string }> }>) {
   return {
@@ -36,15 +23,12 @@ describe("fixEmptyMessagesWithSDK", () => {
   beforeEach(() => {
     mockReplaceEmptyTextParts.mockReset()
     mockInjectTextPart.mockReset()
-    mockFindEmptyTextPartsFromSDK.mockReset()
     mockReplaceEmptyTextParts.mockReturnValue(Promise.resolve(false))
     mockInjectTextPart.mockReturnValue(Promise.resolve(false))
-    mockFindEmptyTextPartsFromSDK.mockReturnValue(Promise.resolve([]))
   })
 
   it("returns fixed=false when no empty messages exist", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_1" }, parts: [{ type: "text", text: "Hello" }] },
     ])
@@ -64,7 +48,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("fixes empty message via replace when scanning all", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_1" }, parts: [{ type: "text", text: "" }] },
     ])
@@ -85,7 +68,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("falls back to inject when replace fails", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_1" }, parts: [] },
     ])
@@ -106,7 +88,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("fixes target message by index when provided", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_0" }, parts: [{ type: "text", text: "ok" }] },
       { info: { id: "msg_1" }, parts: [] },
@@ -129,7 +110,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("skips messages without info.id", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { parts: [] },
       { info: {}, parts: [] },
@@ -149,7 +129,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("treats thinking-only messages as empty", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_1" }, parts: [{ type: "thinking", text: "hmm" }] },
     ])
@@ -169,7 +148,6 @@ describe("fixEmptyMessagesWithSDK", () => {
 
   it("treats tool_use messages as non-empty", async () => {
     //#given
-    const { fixEmptyMessagesWithSDK } = await emptyContentRecoveryModulePromise
     const client = createMockClient([
       { info: { id: "msg_1" }, parts: [{ type: "tool_use" }] },
     ])

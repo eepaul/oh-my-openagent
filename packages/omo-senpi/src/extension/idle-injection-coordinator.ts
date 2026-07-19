@@ -1,4 +1,4 @@
-export type IdleInjectionSource = "task-completion" | "team-message" | "ulw-continuation"
+export type IdleInjectionSource = "task-completion" | "team-message" | "boulder-continuation" | "ulw-continuation"
 
 export interface IdleInjection {
   // Dedupe/order key. Task completions key on their task id; the ulw continuation keys on its source
@@ -6,6 +6,7 @@ export interface IdleInjection {
   readonly key: string
   readonly source: IdleInjectionSource
   readonly content: string
+  readonly onFlushed?: () => void
 }
 
 export type IdleInjectionDelivery = (content: string, options: { deliverAs: "steer" | "followUp" }) => void
@@ -24,7 +25,8 @@ export interface IdleInjectionCoordinatorOptions {
 const SOURCE_RANK: Readonly<Record<IdleInjectionSource, number>> = {
   "task-completion": 0,
   "team-message": 1,
-  "ulw-continuation": 2,
+  "boulder-continuation": 2,
+  "ulw-continuation": 3,
 }
 
 /**
@@ -89,6 +91,7 @@ export class IdleInjectionCoordinator {
     const collapsed = ordered.length
     this.#pending.clear()
     this.#deliver(ordered.map((injection) => injection.content).join("\n\n"), { deliverAs: "steer" })
+    for (const injection of ordered) injection.onFlushed?.()
     return collapsed
   }
 }

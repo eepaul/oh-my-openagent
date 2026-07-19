@@ -24,9 +24,19 @@
  */
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
+
+import {
+	findTomlSection as findSection,
+	hasTomlSetting,
+	removeTomlSectionSetting,
+	removeRootTomlSetting,
+	replaceOrInsertTomlSectionSetting,
+	replaceOrInsertRootTomlSetting,
+} from "./toml-section-editor.mjs";
 
 const MANAGED_COMMENT_MARKER = "openai/codex#26753";
+const MULTI_AGENT_V2_THREAD_LIMIT_KEY = "features.multi_agent_v2.max_concurrent_threads_per_session";
 const MANAGED_DISABLE_COMMENT = [
 	"# Managed by LazyCodex: multi_agent_v2 is re-disabled on every Codex session start",
 	`# because enabling it fails every turn with HTTP 400 (${MANAGED_COMMENT_MARKER}).`,
@@ -42,6 +52,7 @@ const MANAGED_DISABLE_COMMENT = [
  *   requireSessionModel?: boolean,
  *   env?: NodeJS.ProcessEnv,
  *   modelsCachePath?: string,
+ *   configPath?: string,
  * }} [options]
  */
 export function forceDisableMultiAgentV2(config, options = {}) {
@@ -55,8 +66,9 @@ export function forceDisableMultiAgentV2(config, options = {}) {
 		options.multiAgentVersion !== undefined
 			? options.multiAgentVersion
 			: resolveMultiAgentVersionFromConfig(normalized, options);
+	const effectiveModel = sessionModel || readRootModel(normalized);
 
-	if (prefersMultiAgentV2(multiAgentVersion, sessionModel)) {
+	if (prefersMultiAgentV2(multiAgentVersion, effectiveModel)) {
 		return clearMultiAgentV2DisableForReservedSchema(normalized);
 	}
 
@@ -65,6 +77,15 @@ export function forceDisableMultiAgentV2(config, options = {}) {
 	// session model, do not force-disable — writing enabled=false would break a
 	// GPT-5.6 reserved collaboration.spawn_agent session.
 	if (options.requireSessionModel === true && !sessionModel) {
+		return normalized;
+	}
+
+	// No model evidence at all (no session model AND no root `model` in
+	// config.toml — Codex Desktop selects the model in the UI): config alone
+	// cannot prove the session is not a GPT-5.6 reserved-schema model, and
+	// writing `enabled = false` would 400 every turn on those sessions
+	// (#6002). Leave the enable state untouched.
+	if (multiAgentVersion == null && !sessionModel && !readRootModel(normalized)) {
 		return normalized;
 	}
 
@@ -92,13 +113,17 @@ export function prefersMultiAgentV2(multiAgentVersion, sessionModel) {
  * Resolve the effective model against Codex `models_cache.json`.
  * Prefers SessionStart `model` over the root `model` in config.toml.
  * @param {string} config
- * @param {{ sessionModel?: string | null, env?: NodeJS.ProcessEnv, modelsCachePath?: string }} [options]
+ * @param {{ sessionModel?: string | null, env?: NodeJS.ProcessEnv, modelsCachePath?: string, configPath?: string }} [options]
  * @returns {"v1" | "v2" | null}
  */
 export function resolveMultiAgentVersionFromConfig(config, options = {}) {
 	const model = normalizeModel(options.sessionModel) || readRootModel(config);
 	if (!model) return null;
-	return resolveMultiAgentVersionForModel(model, options);
+	const version = resolveMultiAgentVersionForModel(model, {
+		...options,
+		modelsCachePath: options.modelsCachePath?.trim() || resolveModelCatalogPath(readRootModelCatalogPath(config), options) || undefined,
+	});
+	return version ?? (isGpt56Family(model) ? "v2" : null);
 }
 
 /**
@@ -130,6 +155,26 @@ export function readRootModel(config) {
 	return single?.[1] ?? null;
 }
 
+// Codex documents `model_catalog_json` as a COMPLETE replacement for the
+// fetched models_cache.json (codex-rs/core/src/config/mod.rs load_model_catalog
+// -> load_catalog_json -> ModelsResponse). When set, Codex resolves the model
+// only from that file, so the guard must too — otherwise Codex and the guard
+// disagree on the multi-agent version (lazycodex#120).
+export function readRootModelCatalogPath(config) {
+	const double = config.match(/^\s*model_catalog_json\s*=\s*"([^"]+)"/m);
+	if (double) return double[1];
+	const single = config.match(/^\s*model_catalog_json\s*=\s*'([^']+)'/m);
+	return single?.[1] ?? null;
+}
+
+function resolveModelCatalogPath(configuredPath, options) {
+	const trimmed = normalizeModel(configuredPath);
+	if (!trimmed) return null;
+	if (isAbsolute(trimmed)) return trimmed;
+	const baseDir = options.configPath ? dirname(options.configPath) : options.env?.CODEX_HOME?.trim() || join(homedir(), ".codex");
+	return join(baseDir, trimmed);
+}
+
 function normalizeModel(value) {
 	if (typeof value !== "string") return null;
 	const trimmed = value.trim();
@@ -142,7 +187,11 @@ function isGpt56Family(model) {
 
 function clearMultiAgentV2DisableForReservedSchema(config) {
 	// `config` arrives shorthand-normalized from forceDisableMultiAgentV2.
-	const result = removeManagedDisableComments(config);
+	let result = removeManagedDisableComments(config);
+	result = removeRootTomlSetting(result, "features.multi_agent_v2.enabled", "false");
+	result = removeRootTomlSetting(result, "features.multi_agent_v2.hide_spawn_agent_metadata", "false");
+	result = removeDottedMultiAgentV2Setting(result, "enabled", "false");
+	result = removeDottedMultiAgentV2Setting(result, "hide_spawn_agent_metadata", "false");
 
 	const section = findSection(result, "[features.multi_agent_v2]");
 	if (!section) return result;
@@ -168,6 +217,9 @@ function forceDisableLegacyEncryptedV2(config) {
 	const section = findSection(config, "[features.multi_agent_v2]");
 
 	if (!section) {
+		if (hasTomlSetting(config, MULTI_AGENT_V2_THREAD_LIMIT_KEY)) {
+			return setDottedMultiAgentV2Disable(config);
+		}
 		return ensureManagedComment(appendDisabledSection(config));
 	}
 
@@ -185,6 +237,20 @@ function forceDisableLegacyEncryptedV2(config) {
 	const insertAt = headerEnd === -1 ? section.text.length : headerEnd + 1;
 	const patched = `${section.text.slice(0, insertAt)}${headerEnd === -1 ? "\n" : ""}enabled = false\n${section.text.slice(insertAt)}`;
 	return ensureManagedComment(config.slice(0, section.start) + patched + config.slice(section.end));
+}
+
+function setDottedMultiAgentV2Disable(config) {
+	const featuresSection = findSection(config, "[features]");
+	if (!featuresSection) {
+		return replaceOrInsertRootTomlSetting(config, "features.multi_agent_v2.enabled", "false");
+	}
+	return replaceOrInsertTomlSectionSetting(config, featuresSection, "multi_agent_v2.enabled", "false");
+}
+
+function removeDottedMultiAgentV2Setting(config, key, expectedValue) {
+	const featuresSection = findSection(config, "[features]");
+	if (!featuresSection) return config;
+	return removeTomlSectionSetting(config, featuresSection, `multi_agent_v2.${key}`, expectedValue);
 }
 
 function ensureManagedComment(config) {
@@ -233,31 +299,4 @@ function appendDisabledSection(config) {
 	const trimmed = config.trimEnd();
 	const prefix = trimmed.length === 0 ? "" : `${trimmed}\n\n`;
 	return `${prefix}[features.multi_agent_v2]\nenabled = false\n`;
-}
-
-// Strips a trailing # comment from a TOML line fragment (best-effort; quoted keys containing # are out of scope).
-function stripTrailingComment(line) {
-	const idx = line.indexOf("#");
-	return idx === -1 ? line : line.slice(0, idx).trim();
-}
-
-function findSection(config, headerLine) {
-	const lines = config.match(/[^\n]*\n?|$/g) ?? [];
-	let offset = 0;
-	let start = -1;
-	for (const line of lines) {
-		if (line.length === 0) break;
-		const trimmed = line.trim();
-		if (start === -1) {
-			if (stripTrailingComment(trimmed) === headerLine) start = offset;
-		} else {
-			const bare = stripTrailingComment(trimmed);
-			if (bare.startsWith("[") && bare.endsWith("]")) {
-				return { start, end: offset, text: config.slice(start, offset) };
-			}
-		}
-		offset += line.length;
-	}
-	if (start === -1) return null;
-	return { start, end: config.length, text: config.slice(start) };
 }

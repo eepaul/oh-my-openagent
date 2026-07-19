@@ -1,11 +1,20 @@
 import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { dirname, isAbsolute, join } from "node:path"
 
-import { appendBlock, escapeRegExp, findTomlSection, removeSetting, replaceOrInsertSetting } from "./toml-section-editor"
+import {
+  appendBlock,
+  escapeRegExp,
+  findTomlSection,
+  removeSetting,
+  replaceOrInsertSetting,
+} from "./toml-section-editor"
+import { hasTomlSetting } from "./toml-setting-reader"
 
 const CODEX_AGENTS_HEADER = "agents"
 const CODEX_MULTI_AGENT_V2_HEADER = "features.multi_agent_v2"
+const CODEX_MULTI_AGENT_V2_THREAD_LIMIT_KEY = `${CODEX_MULTI_AGENT_V2_HEADER}.max_concurrent_threads_per_session`
 const CODEX_SUBAGENT_THREAD_LIMIT = 1000
+const CODEX_MULTI_AGENT_V2_THREAD_LIMIT = 16
 
 export type CodexMultiAgentVersion = "v1" | "v2" | null
 
@@ -26,6 +35,12 @@ export type CodexMultiAgentVersion = "v1" | "v2" | null
  * the legacy `[features]` boolean shorthand (a config-level disable
  * mismatches the reserved `collaboration.spawn_agent` schema on some Codex
  * versions - oh-my-openagent#6002 / #6008).
+ *
+ * When config.toml names no root model at all (Codex Desktop selects the
+ * model in the UI), the installer never introduces `agents.max_threads`:
+ * Codex rejects that key at thread/start while MultiAgentV2 is active. An
+ * existing cap is still raised in place so the legacy low-cap repair keeps
+ * working and a hand-removed key stays removed.
  */
 export function ensureCodexMultiAgentV2Config(
   config: string,
@@ -33,33 +48,33 @@ export function ensureCodexMultiAgentV2Config(
 ): string {
   const featureFlag = removeFeatureFlagSetting(config, "multi_agent_v2")
   const v2Preferred = options.multiAgentVersion === "v2"
+  const modelKnown = options.multiAgentVersion != null || readRootModel(featureFlag.config) !== null
   const agentsConfig = v2Preferred
     ? removeAgentsMaxThreads(featureFlag.config)
-    : ensureAgentsMaxThreads(featureFlag.config)
-  const section = findTomlSection(agentsConfig, CODEX_MULTI_AGENT_V2_HEADER)
-  const maxThreadsValue = CODEX_SUBAGENT_THREAD_LIMIT.toString()
+    : modelKnown
+      ? ensureAgentsMaxThreads(featureFlag.config)
+      : raiseExistingAgentsMaxThreads(featureFlag.config)
   const preserveDisable = featureFlag.value === false && !v2Preferred
+  const featureConfig = preserveDisable
+    ? setMultiAgentV2Disable(agentsConfig)
+    : v2Preferred
+      ? removeMultiAgentV2Disable(agentsConfig)
+      : agentsConfig
+  if (hasTomlSetting(featureConfig, CODEX_MULTI_AGENT_V2_THREAD_LIMIT_KEY)) return featureConfig
+  const section = findTomlSection(featureConfig, CODEX_MULTI_AGENT_V2_HEADER)
   if (!section) {
     const enabledSetting = preserveDisable ? "enabled = false\n" : ""
     return appendBlock(
-      agentsConfig,
-      `[${CODEX_MULTI_AGENT_V2_HEADER}]\n${enabledSetting}max_concurrent_threads_per_session = ${maxThreadsValue}\n`,
+      featureConfig,
+      `[${CODEX_MULTI_AGENT_V2_HEADER}]\n${enabledSetting}max_concurrent_threads_per_session = ${CODEX_MULTI_AGENT_V2_THREAD_LIMIT}\n`,
     )
   }
-
-  const withPreservedDisable = preserveDisable
-    ? replaceOrInsertSetting(agentsConfig, section, "enabled", "false")
-    : agentsConfig
-  const updatedSection = preserveDisable
-    ? findTomlSection(withPreservedDisable, CODEX_MULTI_AGENT_V2_HEADER)
-    : section
-  if (!updatedSection) {
-    return appendBlock(
-      withPreservedDisable,
-      `[${CODEX_MULTI_AGENT_V2_HEADER}]\nenabled = false\nmax_concurrent_threads_per_session = ${maxThreadsValue}\n`,
-    )
-  }
-  return replaceOrInsertSetting(withPreservedDisable, updatedSection, "max_concurrent_threads_per_session", maxThreadsValue)
+  return replaceOrInsertSetting(
+    featureConfig,
+    section,
+    "max_concurrent_threads_per_session",
+    CODEX_MULTI_AGENT_V2_THREAD_LIMIT.toString(),
+  )
 }
 
 /**
@@ -71,9 +86,15 @@ export function ensureCodexMultiAgentV2Config(
 export function resolveCodexMultiAgentVersion(config: string, configPath: string): CodexMultiAgentVersion {
   const model = readRootModel(config)
   if (model === null) return null
-  const catalogVersion = readCatalogMultiAgentVersion(model, join(dirname(configPath), "models_cache.json"))
+  const catalogPath = resolveCatalogPath(readRootModelCatalogPath(config), configPath)
+  const catalogVersion = readCatalogMultiAgentVersion(model, catalogPath)
   if (catalogVersion !== null) return catalogVersion
   return /^gpt-5\.6\b/i.test(model) ? "v2" : null
+}
+
+function resolveCatalogPath(configuredPath: string | null, configPath: string): string {
+  if (configuredPath === null) return join(dirname(configPath), "models_cache.json")
+  return isAbsolute(configuredPath) ? configuredPath : join(dirname(configPath), configuredPath)
 }
 
 function readCatalogMultiAgentVersion(model: string, cachePath: string): CodexMultiAgentVersion {
@@ -104,6 +125,13 @@ function readRootModel(config: string): string | null {
   const double = config.match(/^\s*model\s*=\s*"([^"]+)"/m)
   if (double !== null) return double[1] ?? null
   const single = config.match(/^\s*model\s*=\s*'([^']+)'/m)
+  return single?.[1] ?? null
+}
+
+function readRootModelCatalogPath(config: string): string | null {
+  const double = config.match(/^\s*model_catalog_json\s*=\s*"([^"]+)"/m)
+  if (double !== null) return double[1] ?? null
+  const single = config.match(/^\s*model_catalog_json\s*=\s*'([^']+)'/m)
   return single?.[1] ?? null
 }
 
@@ -140,6 +168,26 @@ function removeAgentsMaxThreads(config: string): string {
   if (!section) return config
   if (!/^\s*max_threads\s*=/m.test(section.text)) return config
   return removeSetting(config, section, "max_threads")
+}
+
+function removeMultiAgentV2Disable(config: string): string {
+  const section = findTomlSection(config, CODEX_MULTI_AGENT_V2_HEADER)
+  if (!section) return config
+  if (!/^\s*enabled\s*=\s*false(?:\s*#.*)?$/m.test(section.text)) return config
+  return removeSetting(config, section, "enabled")
+}
+
+function setMultiAgentV2Disable(config: string): string {
+  const section = findTomlSection(config, CODEX_MULTI_AGENT_V2_HEADER)
+  if (!section) return config
+  return replaceOrInsertSetting(config, section, "enabled", "false")
+}
+
+function raiseExistingAgentsMaxThreads(config: string): string {
+  const section = findTomlSection(config, CODEX_AGENTS_HEADER)
+  if (!section) return config
+  if (!/^\s*max_threads\s*=/m.test(section.text)) return config
+  return replaceOrInsertSetting(config, section, "max_threads", CODEX_SUBAGENT_THREAD_LIMIT.toString())
 }
 
 function readBooleanSetting(sectionText: string, key: string): boolean | null {

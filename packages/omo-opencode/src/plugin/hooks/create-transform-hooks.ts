@@ -1,7 +1,6 @@
 import type { OhMyOpenCodeConfig } from "../../config"
 import type { MonitorManager } from "../../features/monitor"
 import type { PluginContext } from "../types"
-import type { RalphLoopHook } from "../../hooks/ralph-loop"
 import type { AutoCompactState } from "../../hooks/anthropic-context-window-limit-recovery"
 
 import {
@@ -35,11 +34,10 @@ export function createTransformHooks(args: {
   pluginConfig: OhMyOpenCodeConfig
   isHookEnabled: (hookName: string) => boolean
   safeHookEnabled?: boolean
-    ralphLoop?: RalphLoopHook | null
-    getAutoCompactState?: () => AutoCompactState | undefined
-    monitorManager?: MonitorManager
+  getAutoCompactState?: () => AutoCompactState | undefined
+  monitorManager?: MonitorManager
 }): TransformHooks {
-  const { ctx, pluginConfig, isHookEnabled, ralphLoop, getAutoCompactState, monitorManager } = args
+  const { ctx, pluginConfig, isHookEnabled, getAutoCompactState, monitorManager } = args
   const safeHookEnabled = args.safeHookEnabled ?? true
 
   const claudeCodeHooks = isHookEnabled("claude-code-hooks")
@@ -65,7 +63,7 @@ export function createTransformHooks(args: {
           createKeywordDetectorHook(
             ctx,
             contextCollector,
-            ralphLoop ?? undefined,
+            undefined,
             pluginConfig.keyword_detector,
             pluginConfig.default_mode,
           ),
