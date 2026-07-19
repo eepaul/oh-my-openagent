@@ -16,8 +16,8 @@
   },
   "background_task": {
     "providerConcurrency": {
-      "anthropic": 5,
-      "openai": 4,
+      "anthropic": 10,
+      "openai": 10,
       "kimi-for-coding": 4
     }
   },
