@@ -88,7 +88,8 @@
       ]
     },
     "metis": {
-      "model": "anthropic/claude-sonnet-5",
+      "model": "anthropic/claude-fable-5",
+      "variant": "max",
       "fallback_models": [
         {
           "model": "anthropic/claude-opus-4-8",
