@@ -1,14 +1,29 @@
 import type { HookDeps } from "./types"
 import { HOOK_NAME } from "./constants"
 import { log } from "../../shared/logger"
+import { parseModelString } from "../../shared/model-string-parser"
 import { areRuntimeModelsEquivalent, createFallbackState, isModelInCooldown } from "./fallback-state"
+
+function applyModelOverride(
+  message: { model?: { providerID: string; modelID: string }; variant?: string },
+  activeModel: string,
+): void {
+  const parsed = parseModelString(activeModel)
+  if (!parsed) return
+  message.model = { providerID: parsed.providerID, modelID: parsed.modelID }
+  if (parsed.variant !== undefined) {
+    message.variant = parsed.variant
+  } else {
+    delete message.variant
+  }
+}
 
 export function createChatMessageHandler(deps: HookDeps) {
   const { config, sessionStates, sessionLastAccess } = deps
 
   return async (
     input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string } },
-    output: { message: { model?: { providerID: string; modelID: string } }; parts?: Array<{ type: string; text?: string }> }
+    output: { message: { model?: { providerID: string; modelID: string }; variant?: string }; parts?: Array<{ type: string; text?: string }> }
   ) => {
     if (!config.enabled) return
 
@@ -56,13 +71,7 @@ export function createChatMessageHandler(deps: HookDeps) {
       })
       sessionStates.set(sessionID, createFallbackState(activeModel))
 
-      const parts = activeModel.split("/")
-      if (parts.length >= 2) {
-        output.message.model = {
-          providerID: parts[0],
-          modelID: parts.slice(1).join("/"),
-        }
-      }
+      applyModelOverride(output.message, activeModel)
       return
     }
 
@@ -77,13 +86,7 @@ export function createChatMessageHandler(deps: HookDeps) {
     })
 
     if (output.message && activeModel) {
-      const parts = activeModel.split("/")
-      if (parts.length >= 2) {
-        output.message.model = {
-          providerID: parts[0],
-          modelID: parts.slice(1).join("/"),
-        }
-      }
+      applyModelOverride(output.message, activeModel)
     }
   }
 }

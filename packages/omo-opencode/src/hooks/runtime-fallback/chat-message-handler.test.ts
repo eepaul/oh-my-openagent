@@ -108,3 +108,82 @@ describe("createChatMessageHandler runtime fallback model override", () => {
     expect(output.message.model).toBeUndefined()
   })
 })
+
+describe("createChatMessageHandler separates variant from applied model override", () => {
+  test("#given currentModel carries a parenthesized variant #when the fallback override is applied #then modelID is clean and the variant is preserved", async () => {
+    // given
+    const deps = createDeps()
+    const sessionID = "session-fallback-variant-strip"
+    const state = createFallbackState("anthropic/claude-opus-4-8")
+    state.currentModel = "openai/gpt-5.6-sol(medium)"
+    state.fallbackIndex = 0
+    deps.sessionStates.set(sessionID, state)
+    const handler = createChatMessageHandler(deps)
+    const output: { message: { model?: { providerID: string; modelID: string }; variant?: string } } = { message: {} }
+
+    // when
+    await handler({ sessionID }, output)
+
+    // then
+    expect(output.message.model).toEqual({ providerID: "openai", modelID: "gpt-5.6-sol" })
+    expect(output.message.variant).toBe("medium")
+  })
+
+  test("#given originalModel carries a parenthesized variant #when the primary model is restored after cooldown #then modelID is clean and the variant is preserved", async () => {
+    // given
+    const deps = createDeps()
+    deps.config.restore_primary_after_cooldown = true
+    const sessionID = "session-restore-variant-strip"
+    const state = createFallbackState("anthropic/claude-opus-4-8(max)")
+    state.currentModel = "openai/gpt-5.6-sol"
+    state.fallbackIndex = 0
+    deps.sessionStates.set(sessionID, state)
+    const handler = createChatMessageHandler(deps)
+    const output: { message: { model?: { providerID: string; modelID: string }; variant?: string } } = { message: {} }
+
+    // when
+    await handler({ sessionID }, output)
+
+    // then
+    expect(output.message.model).toEqual({ providerID: "anthropic", modelID: "claude-opus-4-8" })
+    expect(output.message.variant).toBe("max")
+  })
+
+  test("#given a fallback model id that itself contains slashes plus a variant #when the override is applied #then only the trailing variant is split off", async () => {
+    // given
+    const deps = createDeps()
+    const sessionID = "session-multislash-variant"
+    const state = createFallbackState("anthropic/claude-opus-4-8")
+    state.currentModel = "openrouter/deepseek/deepseek-v3.2(medium)"
+    state.fallbackIndex = 0
+    deps.sessionStates.set(sessionID, state)
+    const handler = createChatMessageHandler(deps)
+    const output: { message: { model?: { providerID: string; modelID: string }; variant?: string } } = { message: {} }
+
+    // when
+    await handler({ sessionID }, output)
+
+    // then
+    expect(output.message.model).toEqual({ providerID: "openrouter", modelID: "deepseek/deepseek-v3.2" })
+    expect(output.message.variant).toBe("medium")
+  })
+
+  test("#given a fallback model with no variant #when the override is applied over a stale variant #then the stale variant is cleared", async () => {
+    // given
+    const deps = createDeps()
+    const sessionID = "session-no-variant-clears"
+    const state = createFallbackState("anthropic/claude-opus-4-8")
+    state.currentModel = "openai/gpt-5.4-mini"
+    state.fallbackIndex = 0
+    deps.sessionStates.set(sessionID, state)
+    const handler = createChatMessageHandler(deps)
+    const output: { message: { model?: { providerID: string; modelID: string }; variant?: string } } = { message: { variant: "xhigh" } }
+
+    // when
+    await handler({ sessionID }, output)
+
+    // then
+    expect(output.message.model).toEqual({ providerID: "openai", modelID: "gpt-5.4-mini" })
+    expect(output.message.variant).toBeUndefined()
+  })
+})
