@@ -4,6 +4,7 @@ import {
   TEAM_LEAD_SENTINEL,
   WaitRegistry,
   buildLeadTeamTools,
+  createLeadDeliveryJournal,
   createTaskCancelTool,
   createTaskOutputTool,
   createTaskSendTool,
@@ -12,6 +13,7 @@ import {
   resolveTeamRuntimeDirs,
   teamStorageBaseDir,
   toTeamCoreConfig,
+  type LeadDeliveryJournal,
   type TeamToolsService,
   type WaitBounds,
 } from "@oh-my-opencode/senpi-task"
@@ -27,6 +29,7 @@ import { TASK_COMPLETION_MESSAGE_TYPE } from "./parent-notifier"
 import { renderTaskCompletion } from "./renderers"
 import { createTeamMailboxReconciler, createTeamService } from "./team-service"
 import { createSessionTransitionBridge } from "./session-transition-bridge"
+import { wireSessionStartProcessSweep } from "./process-sweep"
 import { createTaskStatusUi } from "./status-ui"
 import { missingTaskCapabilities } from "./surface"
 
@@ -45,6 +48,10 @@ export function createTaskComponent(options: TaskComponentOptions = {}): OmoSenp
   return {
     name: "task",
     register(pi: SenpiExtensionAPI, ctx: ComponentContext): void {
+      // Unconditional omo process hygiene (T16): fires on session_start before any
+      // flag/capability gate can skip the rest of the component.
+      wireSessionStartProcessSweep(pi, ctx)
+
       registerTaskFlags(pi)
       if (pi.getFlag(TASK_ENABLED_FLAG) === false) {
         ctx.logger.info("omo-senpi task component disabled by flag")
@@ -111,7 +118,13 @@ function registerTaskFlags(pi: SenpiExtensionAPI): void {
 function registerTaskTools(pi: SenpiExtensionAPI, engine: TaskEngine, teamService: TeamToolsService): void {
   const resolveCallerSessionId = defaultResolveCallerSessionId
   const manager = engine.manager
-  pi.registerTool({ ...createTaskTool({ manager, omoConfig: engine.omoConfig, agents: engine.agents }) })
+  pi.registerTool({
+    ...createTaskTool({
+      manager,
+      omoConfig: engine.omoConfig,
+      agents: engine.agents,
+    }),
+  })
   pi.registerTool({
     ...createTaskSendTool({ manager, resolveCallerSessionId, teamRouting: { service: teamService, from: TEAM_LEAD_SENTINEL } }),
   })
@@ -138,24 +151,27 @@ function createTeamToolContext(
     ...(engine.settings.state_dir !== undefined ? { task: { state_dir: engine.settings.state_dir } } : {}),
   }
   const waitRegistry = new WaitRegistry<Message>()
+  const deliveryJournal = createLeadDeliveryJournal()
   const leadPollers = createLeadPollerLifecycle({
     listTeams: service.listTeams,
     runtime: engine.runtime,
     config: toTeamCoreConfig(engine.settings, teamStorageBaseDir(stateDir)),
     runtimeDir: (teamRunId) => resolveTeamRuntimeDirs(stateDir, teamRunId).runtimeDir,
     waitRegistry,
+    deliveryJournal,
     appendTaskEvent: engine.appendTaskEvent,
     pi,
     logger: ctx.logger,
     ...(ctx.idleCoordinator !== undefined ? { coordinator: ctx.idleCoordinator } : {}),
   })
-  return { service, reconcileTeamMailbox: createTeamMailboxReconciler(serviceDeps), waitRegistry, leadPollers }
+  return { service, reconcileTeamMailbox: createTeamMailboxReconciler(serviceDeps), waitRegistry, deliveryJournal, leadPollers }
 }
 
 type TeamToolContext = {
   readonly service: TeamToolsService
   readonly reconcileTeamMailbox: () => Promise<void>
   readonly waitRegistry: WaitRegistry<Message>
+  readonly deliveryJournal: LeadDeliveryJournal
   readonly leadPollers: LeadPollerLifecycle
 }
 
@@ -164,6 +180,7 @@ function registerTeamTools(pi: SenpiExtensionAPI, context: TeamToolContext, wait
     service: context.service,
     waitBounds,
     registry: context.waitRegistry,
+    deliveryJournal: context.deliveryJournal,
     resolveLeadPoller: context.leadPollers.resolveLeadPoller,
     resolveTeamRunId: context.leadPollers.resolveTeamRunId,
   })) pi.registerTool({ ...tool })

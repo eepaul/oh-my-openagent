@@ -10,10 +10,6 @@ const sharedSkillsRoot = join(repoRoot, "shared-skills", "skills")
 
 const skillSources = [
   {
-    name: "ultrawork",
-    source: join(repoRoot, "omo-codex", "plugin", "components", "ultrawork", "skills", "ultrawork"),
-  },
-  {
     name: "ulw-loop",
     source: join(repoRoot, "omo-codex", "plugin", "components", "ulw-loop", "skills", "ulw-loop"),
   },
@@ -28,6 +24,14 @@ const nativeSkillSources = [
   {
     name: "hyperplan",
     source: join(nativeSkillsRoot, "hyperplan"),
+  },
+  {
+    name: "ultrawork",
+    source: join(nativeSkillsRoot, "ultrawork"),
+  },
+  {
+    name: "ulw-research",
+    source: join(nativeSkillsRoot, "ulw-research"),
   },
 ]
 const nativeSkillNames = new Set(nativeSkillSources.map(({ name }) => name))

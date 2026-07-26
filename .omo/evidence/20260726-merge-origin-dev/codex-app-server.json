@@ -1,0 +1,22 @@
+installing local omo build into /tmp/cqa-home.8zpPbe/codex (this builds the plugin)...
+install failed; tail:
+Using bundled lsp-daemon dist
+Using bundled git-bash-mcp dist
+[materialize] wrote 148 frontend reference files from submodules
+node:internal/fs/promises:857
+  return await PromisePrototypeThen(
+         ^
+
+Error: EEXIST: file already exists, mkdir '/home/paul/projects/oh-my-openagent/packages/omo-codex/plugin/skills/comment-checker'
+    at async mkdir (node:internal/fs/promises:857:10)
+    at async mkDirAndCopy (node:internal/fs/cp/cp:308:3)
+    at async syncSkills (file:///home/paul/projects/oh-my-openagent/packages/omo-codex/plugin/scripts/sync-skills.mjs:247:3)
+    at async file:///home/paul/projects/oh-my-openagent/packages/omo-codex/plugin/scripts/sync-skills.mjs:268:2 {
+  errno: -17,
+  code: 'EEXIST',
+  syscall: 'mkdir',
+  path: '/home/paul/projects/oh-my-openagent/packages/omo-codex/plugin/skills/comment-checker'
+}
+
+Node.js v22.11.0
+npm run build failed in /home/paul/projects/oh-my-openagent/packages/omo-codex/plugin with exit code 1

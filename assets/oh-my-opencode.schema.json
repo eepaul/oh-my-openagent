@@ -6556,9 +6556,19 @@
           "default": true,
           "type": "boolean"
         },
+        "daemon": {
+          "default": false,
+          "type": "boolean"
+        },
         "enabled": {
           "default": true,
           "type": "boolean"
+        },
+        "excluded_roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "install_dir": {
           "type": "string"
@@ -6574,6 +6584,7 @@
       "required": [
         "auto_init",
         "auto_provision",
+        "daemon",
         "enabled"
       ],
       "additionalProperties": false

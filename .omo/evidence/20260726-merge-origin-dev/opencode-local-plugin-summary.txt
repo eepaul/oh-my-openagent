@@ -1,0 +1,5 @@
+real-db-session-count-before=4656
+real-db-session-count-after=4656
+local-plugin=file:///home/paul/projects/oh-my-openagent/packages/omo-opencode/src/index.ts
+fake-model-response=FAKE_OK
+result=PASS

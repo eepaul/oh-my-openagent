@@ -1,0 +1,125 @@
+$ bun run build:codex-install && bun run build:git-bash-mcp && bun run build:lsp-tools-mcp && bun run build:lsp-daemon && npm --prefix packages/lsp-tools-mcp test && npm --prefix packages/omo-codex/plugin ci && npm --prefix packages/omo-codex/plugin/components/ulw-loop test && bun run --cwd packages/omo-codex/plugin build && npm --prefix packages/omo-codex/plugin/components/codegraph run typecheck && npm --prefix packages/omo-codex/plugin/components/codegraph test && node scripts/check-third-party-notices.mjs --ship && bun test packages/omo-opencode/src/cli/cli-installer.platform.test.ts packages/omo-codex/src/install/codex-cache.test.ts packages/omo-codex/src/install/codex-cleanup.test.ts packages/omo-codex/src/install/codex-config-agent-cleanup.test.ts packages/omo-codex/src/install/codex-config-autonomous-features.test.ts packages/omo-codex/src/install/codex-config-reasoning.test.ts packages/omo-codex/src/install/codex-config-toml.test.ts packages/omo-codex/src/install/codex-project-local-cleanup.test.ts packages/omo-codex/src/install/install-codex-project-local-cleanup.test.ts packages/omo-codex/src/install/install-codex.test.ts packages/omo-codex/src/install/install-codex-packaged.test.ts packages/omo-codex/src/install/link-cached-plugin-agents.test.ts packages/omo-codex/src/**/*.test.ts packages/utils/src/jsonc-parser.test.ts packages/utils/src/frontmatter.test.ts packages/hashline-core/src/hash-computation.test.ts packages/hashline-core/src/smoke-untested-modules.test.ts packages/rules-engine/src/index.test.ts packages/rules-engine/src/security-boundary.test.ts packages/agents-md-core/src/injector.test.ts packages/omo-codex/plugin/components/lsp/test/package-smoke.test.ts && node --test packages/omo-codex/plugin/test/*.test.mjs packages/omo-codex/scripts/install-cache-copy.test.mjs packages/omo-codex/scripts/install-cli-args.test.mjs packages/omo-codex/scripts/install-delegated-command.test.mjs packages/omo-codex/scripts/install-config-autonomous-features.test.mjs packages/omo-codex/scripts/install-config-autonomous.test.mjs packages/omo-codex/scripts/install-config-reasoning.test.mjs packages/omo-codex/scripts/install-config.test.mjs packages/omo-codex/scripts/install-hook-targets.test.mjs packages/omo-codex/scripts/install-project-local-cleanup.test.mjs packages/omo-codex/scripts/install-lazycodex-version-stamp.test.mjs packages/omo-codex/scripts/install-local-entrypoint.test.mjs packages/omo-codex/scripts/install-local-git-bash-preflight.test.mjs packages/omo-codex/scripts/install-local.test.mjs packages/omo-codex/scripts/install-marketplace-cache.test.mjs packages/omo-codex/scripts/install-mcp-context7-runtime.test.mjs packages/omo-codex/scripts/install-mcp-runtime.test.mjs packages/omo-codex/scripts/install-packaged-local.test.mjs packages/omo-codex/scripts/install-generated-bundle.test.mjs packages/omo-codex/scripts/install-agent-links.test.mjs packages/omo-codex/scripts/install-bin-links.test.mjs
+$ bun run script/build-codex-install.ts
+$ bun run --cwd packages/git-bash-mcp build
+$ bun build src/cli.ts --outdir dist --target node --format esm
+Bundled 15 modules in 20ms
+
+  cli.js  22.58 KB  (entry point)
+
+$ npm --prefix packages/lsp-tools-mcp ci && npm --prefix packages/lsp-tools-mcp run build
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'rolldown@1.0.3',
+npm warn EBADENGINE   required: { node: '^20.19.0 || >=22.12.0' },
+npm warn EBADENGINE   current: { node: 'v22.11.0', npm: '11.6.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'vite@8.0.16',
+npm warn EBADENGINE   required: { node: '^20.19.0 || >=22.12.0' },
+npm warn EBADENGINE   current: { node: 'v22.11.0', npm: '11.6.2' }
+npm warn EBADENGINE }
+
+added 50 packages, and audited 53 packages in 2s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+1 high severity vulnerability
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+
+> @code-yeongyu/lsp-tools-mcp@0.1.0 build
+> node scripts/ensure-core-links.mjs && rm -rf dist && tsc -p tsconfig.build.json --emitDeclarationOnly && bun build src/cli.ts src/mcp.ts src/tools.ts src/request-context.ts src/lsp/manager.ts --outdir dist --target node --format esm
+
+Bundled 65 modules in 59ms
+
+  cli.js               177.32 KB  (entry point)
+  mcp.js               176.84 KB  (entry point)
+  tools.js             165.0 KB   (entry point)
+  request-context.js   7.43 KB    (entry point)
+  lsp/manager.js       103.40 KB  (entry point)
+
+$ npm --prefix packages/lsp-daemon ci && npm --prefix packages/lsp-daemon run build
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'rolldown@1.0.3',
+npm warn EBADENGINE   required: { node: '^20.19.0 || >=22.12.0' },
+npm warn EBADENGINE   current: { node: 'v22.11.0', npm: '11.6.2' }
+npm warn EBADENGINE }
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'vite@8.0.16',
+npm warn EBADENGINE   required: { node: '^20.19.0 || >=22.12.0' },
+npm warn EBADENGINE   current: { node: 'v22.11.0', npm: '11.6.2' }
+npm warn EBADENGINE }
+
+added 50 packages, and audited 53 packages in 2s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+1 high severity vulnerability
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+
+> @code-yeongyu/lsp-daemon@0.1.0 build
+> node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && bun build src/cli.ts src/index.ts src/client.ts --outdir dist --target node --format esm && node scripts/stamp-dist-version.mjs
+
+Bundled 78 modules in 26ms
+
+  cli.js     231.51 KB  (entry point)
+  index.js   212.38 KB  (entry point)
+  client.js  209.94 KB  (entry point)
+
+
+> @code-yeongyu/lsp-tools-mcp@0.1.0 test
+> vitest --run
+
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Cannot find native binding. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+    at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:507:36
+    at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:9:49
+    at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/parse-Bg2pr2Q5.mjs:3:46
+    at ModuleJob.run (node:internal/modules/esm/module_job:268:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:543:26)
+    at async start (file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/vitest/dist/chunks/cac.C9xsMMkH.js:2339:27) {
+  [cause]: Error: Cannot find module '@rolldown/binding-linux-x64-gnu'
+  Require stack:
+  - /home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs
+      at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+      ... 4 lines matching cause stack trace ...
+      at require (node:internal/modules/helpers:141:16)
+      at requireNative (file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:277:21)
+      at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:475:18
+      at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:9:49
+      at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/parse-Bg2pr2Q5.mjs:3:46 {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: [
+      '/home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs'
+    ],
+    cause: Error: Cannot find module '../rolldown-binding.linux-x64-gnu.node'
+    Require stack:
+    - /home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs
+        at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+        at Function._load (node:internal/modules/cjs/loader:1075:27)
+        at TracingChannel.traceSync (node:diagnostics_channel:315:14)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:218:24)
+        at Module.require (node:internal/modules/cjs/loader:1340:12)
+        at require (node:internal/modules/helpers:141:16)
+        at requireNative (file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:272:12)
+        at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:475:18
+        at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/binding-CXquf8ay.mjs:9:49
+        at file:///home/paul/projects/oh-my-openagent/packages/lsp-tools-mcp/node_modules/rolldown/dist/shared/parse-Bg2pr2Q5.mjs:3:46 {
+      code: 'MODULE_NOT_FOUND',
+      requireStack: [Array]
+    }
+  }
+}
+
+
+
+error: script "test:codex" exited with code 1

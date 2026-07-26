@@ -1,9 +1,11 @@
-import type { AgentToolResult, ToolDefinition } from "@code-yeongyu/senpi"
+import type { AgentToolResult, AgentToolUpdateCallback, Theme, ToolDefinition, ToolRenderResultOptions } from "@code-yeongyu/senpi"
 import type { Message } from "@oh-my-opencode/team-core/types"
 import { Type, type Static } from "typebox"
 
+import type { ToolProgressDetails } from "../../progress"
 import type { WaitRegistration } from "../../team/messaging/wait-registry"
 import { clampWaitTimeout, toolResult } from "../control"
+import { linesComponent } from "../task/renderers"
 import type { LeadTeamToolDeps } from "./types"
 
 export const TeamWaitParams = Type.Object({
@@ -14,7 +16,10 @@ export const TeamWaitParams = Type.Object({
 
 export type TeamWaitInput = Static<typeof TeamWaitParams>
 
+type WaitingProgress = ToolProgressDetails["progress"] & { readonly maxWaitMs: number }
+
 export type TeamWaitDetails =
+  | { readonly kind: "waiting"; readonly progress: WaitingProgress }
   | { readonly kind: "message"; readonly message_id: string; readonly from: string; readonly body: string }
   | { readonly kind: "timeout"; readonly timeout_ms: number }
   | { readonly kind: "invalid_arguments"; readonly reason: string }
@@ -31,6 +36,7 @@ export async function runTeamWait(
   deps: LeadTeamToolDeps,
   input: TeamWaitInput,
   signal: AbortSignal | undefined,
+  onUpdate?: AgentToolUpdateCallback<TeamWaitDetails>,
 ): Promise<AgentToolResult<TeamWaitDetails>> {
   const resolved = await deps.resolveTeamRunId(input.team_run_id)
   if (!resolved.ok) {
@@ -46,9 +52,25 @@ export async function runTeamWait(
   }
 
   const timeoutMs = clampWaitTimeout(input.timeout_ms, deps.waitBounds)
+  const activity = `waiting for team message${input.from === undefined ? "" : ` from ${input.from}`}`
+  onUpdate?.(toolResult(activity, { kind: "waiting", progress: { activity, startedAt: Date.now(), maxWaitMs: timeoutMs } }))
   const filter = input.from === undefined ? {} : { from: input.from }
   const registration = deps.registry.register(resolved.teamRunId, filter)
   try {
+    const delivered = deps.deliveryJournal?.takeOldestUnreported(resolved.teamRunId, filter)
+    if (delivered !== undefined) {
+      registration.cancel()
+      // Deliberate: deliver the drained message even when suppression throws or the caller already
+      // aborted. The journal entry is consumed either way; a failed suppress only means the flushed
+      // envelope may also land as a steering duplicate (bounded, id-identical), never a loss.
+      await poller.suppressDelivered?.(delivered.messageId).catch(() => false)
+      return toolResult(formatMessageText(delivered), {
+        kind: "message",
+        message_id: delivered.messageId,
+        from: delivered.from,
+        body: delivered.body,
+      })
+    }
     await poller.pollOnce(filter)
     const outcome = await waitForMessage(registration, timeoutMs, signal)
     switch (outcome.kind) {
@@ -58,7 +80,7 @@ export async function runTeamWait(
           { kind: "timeout", timeout_ms: timeoutMs },
         )
       case "message":
-        return toolResult(`Message from ${outcome.message.from}.`, {
+        return toolResult(formatMessageText(outcome.message), {
           kind: "message",
           message_id: outcome.message.messageId,
           from: outcome.message.from,
@@ -80,8 +102,31 @@ export function createTeamWaitTool(
     label: "Team Wait",
     description: "Wait for the next durable message to the current team lead, optionally filtered by sender.",
     parameters: TeamWaitParams,
-    execute: (_toolCallId: string, params: TeamWaitInput, signal: AbortSignal | undefined) => runTeamWait(deps, params, signal),
+    execute: (_toolCallId: string, params: TeamWaitInput, signal: AbortSignal | undefined, onUpdate: AgentToolUpdateCallback<TeamWaitDetails> | undefined) => runTeamWait(deps, params, signal, onUpdate),
+    renderResult: (result, options, theme) => renderTeamWaitResult(result, options, theme),
   }
+}
+
+type TeamWaitRenderTheme = Pick<Theme, "fg">
+
+type WaitRenderComponent = {
+  render(width: number): string[]
+  invalidate(): void
+}
+
+function renderTeamWaitResult(
+  result: AgentToolResult<unknown>,
+  options: ToolRenderResultOptions,
+  theme: TeamWaitRenderTheme,
+): WaitRenderComponent {
+  const text = options.isPartial && isWaitingDetails(result.details)
+    ? result.details.progress.activity
+    : result.content[0]?.type === "text" ? result.content[0].text : "team_wait"
+  return linesComponent([theme.fg("toolTitle", text)])
+}
+
+function isWaitingDetails(details: unknown): details is Extract<TeamWaitDetails, { readonly kind: "waiting" }> {
+  return typeof details === "object" && details !== null && "kind" in details && details.kind === "waiting"
 }
 
 type WaitOutcome =
@@ -115,6 +160,25 @@ async function waitForMessage(
     if (timer !== undefined) clearTimeout(timer)
     if (signal !== undefined && abortListener !== undefined) signal.removeEventListener("abort", abortListener)
   }
+}
+
+const MESSAGE_BODY_TEXT_MAX = 4_000
+const MESSAGE_SUMMARY_TEXT_MAX = 400
+
+// The wait result is the ONLY model-visible copy of the body (tool details never reach the model),
+// so the text must carry it; oversized bodies are bounded with a pointer to the recovery event.
+export function formatMessageText(message: Message): string {
+  const header = `Message from ${message.from} (id: ${message.messageId}):`
+  const summary = message.summary === undefined ? "" : `\nsummary: ${collapseEcho(message.summary, MESSAGE_SUMMARY_TEXT_MAX)}`
+  const body = message.body.length <= MESSAGE_BODY_TEXT_MAX
+    ? message.body
+    : `${message.body.slice(0, MESSAGE_BODY_TEXT_MAX)}\n...[truncated, full body in the team_message_waited task event]`
+  return `${header}${summary}\n${body}`
+}
+
+function collapseEcho(value: string, max: number): string {
+  const collapsed = value.replace(/\s+/g, " ").trim()
+  return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max)}...`
 }
 
 function assertNever(value: never): never {

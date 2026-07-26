@@ -4,7 +4,6 @@ import { inheritApprovals, listApprovedDirectories } from "../../shared/external
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { setSessionTools } from "../../shared/session-tools-store"
 import { withExternalDirectoryApprovalRules } from "../../shared/question-denied-session-permission"
-import { isInsideTmux } from "../../shared/tmux"
 import { setSessionAgent, subagentSessions, updateSessionAgent } from "../claude-code-session-state"
 import { getTaskToastManager } from "../task-toast-manager"
 import type { ConcurrencyManager } from "./concurrency"
@@ -13,6 +12,7 @@ import type { BackgroundTask, LaunchInput, ResumeInput } from "./types"
 import { buildFallbackBody, FALLBACK_AGENT, isAgentNotFoundError } from "./spawner/fallback-agent"
 import { buildTaskRecord } from "./spawner/task-record"
 import { buildTaskPromptBody } from "./spawner/task-prompt-body"
+import { invokeTmuxSessionCreatedCallback } from "./spawner/tmux-callback-invoker"
 
 export { buildFallbackBody, FALLBACK_AGENT, isAgentNotFoundError }
 
@@ -160,26 +160,15 @@ export async function startTask(
 
   void promptChain
 
-  log("[background-agent] tmux callback check", {
-    hasCallback: !!onSubagentSessionCreated,
+  invokeTmuxSessionCreatedCallback({
+    callback: onSubagentSessionCreated,
     tmuxEnabled,
-    isInsideTmux: isInsideTmux(),
+    suppress: false,
     sessionID,
     parentID: input.parentSessionId,
+    title: input.description,
+    log,
   })
-
-  if (onSubagentSessionCreated && tmuxEnabled && isInsideTmux()) {
-    log("[background-agent] Invoking tmux callback (fire-and-forget)", { sessionID })
-    void onSubagentSessionCreated({
-      sessionID,
-      parentID: input.parentSessionId,
-      title: input.description,
-    }).catch((err) => {
-      log("[background-agent] Failed to spawn tmux pane:", err)
-    })
-  } else {
-    log("[background-agent] SKIP tmux callback - conditions not met")
-  }
 }
 
 export async function resumeTask(

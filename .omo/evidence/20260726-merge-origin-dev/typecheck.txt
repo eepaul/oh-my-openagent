@@ -1,0 +1,3 @@
+$ tsgo --noEmit && bun run typecheck:script && bun run typecheck:packages
+packages/omo-opencode/src/shared/typescript-native-source-parser.ts(1,21): error TS2307: Cannot find module 'typescript/unstable/async' or its corresponding type declarations.
+packages/omo-opencode/src/shared/typescript-native-source-parser.ts(2,33): error TS2307: Cannot find module 'typescript/unstable/ast' or its corresponding type declarations.
