@@ -31,7 +31,7 @@
           "variant": "medium"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -73,7 +73,7 @@
           "model": "anthropic/claude-sonnet-5"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -119,7 +119,7 @@
           "variant": "medium"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -131,7 +131,7 @@
 	  "model": "anthropic/claude-sonnet-5"
 	},
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     }
@@ -146,7 +146,7 @@
           "variant": "max"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -169,7 +169,7 @@
           "variant": "max"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -199,7 +199,7 @@
           "model": "anthropic/claude-sonnet-5"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     },
@@ -221,7 +221,7 @@
           "model": "anthropic/claude-sonnet-5"
         },
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "kimi-for-coding/k3"
         }
       ]
     }
