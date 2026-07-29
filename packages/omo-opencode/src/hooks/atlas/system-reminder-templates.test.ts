@@ -5,6 +5,7 @@ import {
   SINGLE_TASK_DIRECTIVE,
   VERIFICATION_REMINDER,
   VERIFICATION_REMINDER_GEMINI,
+  WAITING_ON_HUMAN_PROMPT,
 } from "./system-reminder-templates"
 
 function requireContinuationRulesSection(): string {
@@ -76,6 +77,14 @@ describe("BOULDER_COMPLETE_PROMPT", () => {
     expect(BOULDER_COMPLETE_PROMPT).toContain("{PLAN_NAME}")
     expect(BOULDER_COMPLETE_PROMPT).toContain("{ELAPSED_HUMAN}")
     expect(BOULDER_COMPLETE_PROMPT).toContain("{TASK_BREAKDOWN}")
+  })
+})
+
+describe("WAITING_ON_HUMAN_PROMPT", () => {
+  it("contains a passive waiting reminder without continuation directives", () => {
+    expect(WAITING_ON_HUMAN_PROMPT).toContain("blocked on a human decision")
+    expect(WAITING_ON_HUMAN_PROMPT).not.toContain("Proceed without asking for permission")
+    expect(WAITING_ON_HUMAN_PROMPT).not.toContain("Do not stop")
   })
 })
 

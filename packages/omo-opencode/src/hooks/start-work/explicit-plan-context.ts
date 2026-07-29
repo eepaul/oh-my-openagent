@@ -5,6 +5,7 @@ import {
   getWorkByPlanName,
   selectActiveWork,
 } from "../../features/boulder-state"
+import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import { log } from "../../shared/logger"
 import { HOOK_NAME } from "./start-work-hook"
 import { buildAutoSelectedPlanContextInfoOnly, buildExistingSessionContext } from "./context-info-formatters"
@@ -27,7 +28,7 @@ export function buildExplicitPlanContext(params: {
   const matchedWork = getWorkByPlanName(directory, explicitPlanName, { worktreePath })
   if (matchedWork) {
     const matchedWorkProgress = getPlanProgress(matchedWork.active_plan)
-    if (matchedWorkProgress.isComplete) {
+    if (isPlanLifecycleComplete(matchedWork.active_plan)) {
       return buildPlanAlreadyCompleteContext({
         planName: matchedWork.plan_name,
         totalTasks: matchedWorkProgress.total,
@@ -50,7 +51,7 @@ export function buildExplicitPlanContext(params: {
   const allPlans = findPrometheusPlans(directory)
   const matchedPlan = findPlanByName(allPlans, explicitPlanName)
   if (!matchedPlan) {
-    const incompletePlans = allPlans.filter((planPath) => !getPlanProgress(planPath).isComplete)
+    const incompletePlans = allPlans.filter((planPath) => !isPlanLifecycleComplete(planPath))
     if (incompletePlans.length === 1) {
       createNewWorkOrInitialize({
         directory,
@@ -73,7 +74,7 @@ export function buildExplicitPlanContext(params: {
   }
 
   const progress = getPlanProgress(matchedPlan)
-  if (progress.isComplete) {
+  if (isPlanLifecycleComplete(matchedPlan)) {
     return buildPlanAlreadyCompleteContext({
       planName: getPlanName(matchedPlan),
       totalTasks: progress.total,

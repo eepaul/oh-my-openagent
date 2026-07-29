@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `/stop-continuation` no longer deletes `.omo/boulder.json`; it archives to `boulder.json.stopped-<timestamp>` and reports the archive result.
+- BOULDER/TODO continuation recognizes plans fully blocked on `[~]`, sends one passive reminder per waiting episode instead of repeatedly forcing continuation, and resumes normal continuation when the block clears.
 
 ## [4.14.0] - 2026-06-29
 

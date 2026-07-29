@@ -1,4 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
+import { isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import {
   getPlanProgress,
   getTaskSessionState,
@@ -16,7 +17,9 @@ import {
   RETRY_DELAY_MS,
 } from "./idle-constants"
 import { canContinueTrackedBoulderSession } from "./idle-session-eligibility"
+import { clearPendingRetryTimer } from "./retry-timer"
 import type { AtlasHookOptions, SessionState } from "./types"
+import { notifyAtlasWaitingOnHuman } from "./waiting-on-human-gate"
 
 const ACTIVE_BACKGROUND_TASK_STATUSES = new Set(["pending", "running"])
 
@@ -41,6 +44,12 @@ export async function injectContinuation(input: {
   idleSettleMs?: number
 }): Promise<void> {
   const remaining = input.progress.total - input.progress.completed
+  if (input.options?.isContinuationStopped?.(input.sessionID)) {
+    clearPendingRetryTimer(input.sessionState)
+    log(`[${HOOK_NAME}] Skipped injection: continuation stopped for session`, { sessionID: input.sessionID })
+    return
+  }
+
   if (input.sessionState.isInjectingContinuation) {
     scheduleRetry({
       ctx: input.ctx,
@@ -71,6 +80,26 @@ export async function injectContinuation(input: {
       return
     }
 
+    if (input.options?.isContinuationStopped?.(input.sessionID)) {
+      clearPendingRetryTimer(input.sessionState)
+      log(`[${HOOK_NAME}] Skipped injection: continuation stopped for session`, { sessionID: input.sessionID })
+      return
+    }
+
+    if (currentPlanPath && isPlanWaitingOnHuman(currentPlanPath)) {
+      await notifyAtlasWaitingOnHuman({
+        ctx: input.ctx,
+        sessionID: input.sessionID,
+        sessionState: input.sessionState,
+        options: input.options,
+        planPath: currentPlanPath,
+        planName: currentBoulder.plan_name,
+        settleMs: input.idleSettleMs,
+      })
+      return
+    }
+    input.options?.waitingOnHumanNotifier?.reset(input.sessionID)
+
     const canContinueSession = await canContinueTrackedBoulderSession({
       client: input.ctx.client,
       sessionID: input.sessionID,
@@ -99,6 +128,10 @@ export async function injectContinuation(input: {
       backgroundManager: input.options?.backgroundManager,
       sessionState: input.sessionState,
       idleSettleMs: input.idleSettleMs,
+      preDispatchGuard: () =>
+        !input.options?.isContinuationStopped?.(input.sessionID)
+        && currentPlanPath !== null
+        && !isPlanWaitingOnHuman(currentPlanPath),
     })
 
     if (result === "injected") {
@@ -186,9 +219,23 @@ export function scheduleRetry(input: {
       const normalizedSessionID = normalizeSessionId(sessionID)
       if (!currentBoulder.session_ids?.includes(normalizedSessionID)) return
 
-      const currentProgress = getPlanProgress(resolveBoulderPlanPath(ctx.directory, currentBoulder))
-      if (currentProgress.isComplete) return
+      const currentPlanPath = resolveBoulderPlanPath(ctx.directory, currentBoulder)
       if (options?.isContinuationStopped?.(sessionID)) return
+      if (isPlanWaitingOnHuman(currentPlanPath)) {
+        await notifyAtlasWaitingOnHuman({
+          ctx,
+          sessionID,
+          sessionState,
+          options,
+          planPath: currentPlanPath,
+          planName: currentBoulder.plan_name,
+        })
+        return
+      }
+      options?.waitingOnHumanNotifier?.reset(sessionID)
+
+      const currentProgress = getPlanProgress(currentPlanPath)
+      if (currentProgress.isComplete) return
       const canContinueSession = await canContinueTrackedBoulderSession({
         client: ctx.client,
         sessionID,

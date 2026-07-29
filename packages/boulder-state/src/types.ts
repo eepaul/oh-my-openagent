@@ -46,6 +46,7 @@ export interface PlanChecklist {
   total: number
   completed: number
   remaining: number
+  blocked?: number
   nextTaskLabel: string | null
 }
 

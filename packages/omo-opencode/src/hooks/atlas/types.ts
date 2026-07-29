@@ -1,5 +1,6 @@
 import type { AgentOverrides } from "../../config"
 import type { TopLevelTaskRef } from "../../features/boulder-state"
+import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
 
 export type ModelInfo = { providerID: string; modelID: string; variant?: string }
 
@@ -11,6 +12,7 @@ export interface AtlasHookOptions {
   directory: string
   backgroundManager?: BackgroundTaskStatusProvider
   isContinuationStopped?: (sessionID: string) => boolean
+  waitingOnHumanNotifier?: WaitingOnHumanNotifier
   isCallerOrchestrator?: (sessionID: string | undefined) => Promise<boolean>
   agentOverrides?: AgentOverrides
   idleSettleMs?: number

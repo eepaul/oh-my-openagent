@@ -10,6 +10,7 @@ import {
   createCompactionTodoPreserverHook,
   createAtlasHook,
 } from "../../hooks"
+import { createWaitingOnHumanNotifier } from "../../hooks/shared/waiting-on-human-notifier"
 import { safeCreateHook } from "../../shared/safe-create-hook"
 import { createUnstableAgentBabysitter } from "../unstable-agent-babysitter"
 
@@ -41,6 +42,8 @@ export function createContinuationHooks(args: {
   const safeHook = <T>(hookName: HookName, factory: () => T): T | null =>
     safeCreateHook(hookName, factory, { enabled: safeHookEnabled })
 
+  const waitingOnHumanNotifier = createWaitingOnHumanNotifier()
+
   const stopContinuationGuard = isHookEnabled("stop-continuation-guard")
     ? safeHook("stop-continuation-guard", () =>
         createStopContinuationGuardHook(ctx, {
@@ -62,6 +65,7 @@ export function createContinuationHooks(args: {
       createTodoContinuationEnforcer(ctx, {
           backgroundManager,
           isContinuationStopped: stopContinuationGuard?.isStopped,
+          waitingOnHumanNotifier,
         }))
     : null
 
@@ -81,6 +85,7 @@ export function createContinuationHooks(args: {
           backgroundManager,
           isContinuationStopped: (sessionID: string) =>
             stopContinuationGuard?.isStopped(sessionID) ?? false,
+          waitingOnHumanNotifier,
           agentOverrides: pluginConfig.agents,
           autoCommit: pluginConfig.start_work?.auto_commit,
         }))

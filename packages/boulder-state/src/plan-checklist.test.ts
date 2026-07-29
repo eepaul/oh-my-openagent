@@ -42,6 +42,7 @@ describe("parsePlanChecklist", () => {
 
     // then
     expect(checklist).toEqual({
+      blocked: 0,
       completed: 2,
       remaining: 2,
       total: 4,
@@ -57,7 +58,7 @@ describe("parsePlanChecklist", () => {
     const checklist = parsePlanChecklist(markdown)
 
     // then
-    expect(checklist).toEqual({ completed: 1, remaining: 1, total: 2, nextTaskLabel: "First" })
+    expect(checklist).toEqual({ blocked: 0, completed: 1, remaining: 1, total: 2, nextTaskLabel: "First" })
   })
 
   test("#given a heading-free legacy star checklist #when parsed #then fallback behavior is preserved", () => {
@@ -68,7 +69,18 @@ describe("parsePlanChecklist", () => {
     const checklist = parsePlanChecklist(markdown)
 
     // then
-    expect(checklist).toEqual({ completed: 1, remaining: 1, total: 2, nextTaskLabel: "First" })
+    expect(checklist).toEqual({ blocked: 0, completed: 1, remaining: 1, total: 2, nextTaskLabel: "First" })
+  })
+
+  test("#given a whitespace-tolerant legacy blocked row #when parsed #then it is counted outside progress totals", () => {
+    // given
+    const markdown = ["# Plan", "* [ \t~ \t] Waiting on a human"].join("\n")
+
+    // when
+    const checklist = parsePlanChecklist(markdown)
+
+    // then
+    expect(checklist).toEqual({ blocked: 1, completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
   })
 
   test("#given completed implementation rows and pending final verifier #when parsed #then final verifier is next", () => {
@@ -84,7 +96,29 @@ describe("parsePlanChecklist", () => {
     const checklist = parsePlanChecklist(markdown)
 
     // then
-    expect(checklist).toEqual({ completed: 1, remaining: 1, total: 2, nextTaskLabel: "F1. Verify the result" })
+    expect(checklist).toEqual({
+      blocked: 0,
+      completed: 1,
+      remaining: 1,
+      total: 2,
+      nextTaskLabel: "F1. Verify the result",
+    })
+  })
+
+  test("#given blocked TODO and final-wave rows #when parsed #then both structured patterns are counted outside progress", () => {
+    // given
+    const markdown = [
+      "## TODOs",
+      "- [~] 1. Wait for a human decision",
+      "## Final verification wave",
+      "- [~] F2. Wait for human verification",
+    ].join("\n")
+
+    // when
+    const checklist = parsePlanChecklist(markdown)
+
+    // then
+    expect(checklist).toEqual({ blocked: 2, completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
   })
 
   test("#given noncanonical structured rows #when parsed #then only exact positive-number grammar is counted", () => {
@@ -107,6 +141,7 @@ describe("parsePlanChecklist", () => {
 
     // then
     expect(checklist).toEqual({
+      blocked: 0,
       completed: 1,
       remaining: 1,
       total: 2,
@@ -133,6 +168,7 @@ describe("parsePlanChecklist", () => {
 
     // then
     expect(checklist).toEqual({
+      blocked: 0,
       completed: 1,
       remaining: 1,
       total: 2,
@@ -148,7 +184,13 @@ describe("parsePlanChecklist", () => {
     const checklist = parsePlanChecklist(markdown)
 
     // then
-    expect(checklist).toEqual({ completed: 1, remaining: 1, total: 2, nextTaskLabel: "2. Second task" })
+    expect(checklist).toEqual({
+      blocked: 0,
+      completed: 1,
+      remaining: 1,
+      total: 2,
+      nextTaskLabel: "2. Second task",
+    })
   })
 
   test("#given a four-backtick fence containing triple-backtick examples #when parsed #then shorter fences do not close it", () => {
@@ -170,6 +212,7 @@ describe("parsePlanChecklist", () => {
 
     // then
     expect(checklist).toEqual({
+      blocked: 0,
       completed: 1,
       remaining: 1,
       total: 2,
@@ -191,6 +234,7 @@ describe("parsePlanChecklist", () => {
 
     // then
     expect(checklist).toEqual({
+      blocked: 0,
       completed: 0,
       remaining: 2,
       total: 2,
@@ -218,7 +262,7 @@ describe("parsePlanChecklist", () => {
     const checklist = parsePlanChecklist(markdown)
 
     // then
-    expect(checklist).toEqual({ completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
+    expect(checklist).toEqual({ blocked: 0, completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
   })
 })
 
@@ -233,7 +277,7 @@ describe("getPlanChecklist", () => {
     const checklist = getPlanChecklist(join(directory, "missing.md"))
 
     // then
-    expect(checklist).toEqual({ completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
+    expect(checklist).toEqual({ blocked: 0, completed: 0, remaining: 0, total: 0, nextTaskLabel: null })
   })
 
   test("#given complete plan #when checklist is read #then no next task is returned", () => {
@@ -250,6 +294,6 @@ describe("getPlanChecklist", () => {
     const checklist = getPlanChecklist(planPath)
 
     // then
-    expect(checklist).toEqual({ completed: 3, remaining: 0, total: 3, nextTaskLabel: null })
+    expect(checklist).toEqual({ blocked: 0, completed: 3, remaining: 0, total: 3, nextTaskLabel: null })
   })
 })

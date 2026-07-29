@@ -1,10 +1,25 @@
 import type { BackgroundManager } from "../../features/background-agent"
 import type { ToolPermission } from "../../features/hook-message-injector"
+import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
+
+export type CountdownTimerHandle = {
+  readonly cancel: () => void
+  readonly unref?: () => void
+}
+
+export type CountdownScheduler = {
+  readonly setTimeout: (callback: () => void, delay: number) => CountdownTimerHandle
+  readonly clearTimeout: (timer: CountdownTimerHandle) => void
+  readonly setInterval: (callback: () => void, delay: number) => CountdownTimerHandle
+  readonly clearInterval: (timer: CountdownTimerHandle) => void
+}
 
 export interface TodoContinuationEnforcerOptions {
   backgroundManager?: BackgroundManager
   skipAgents?: string[]
   isContinuationStopped?: (sessionID: string) => boolean
+  waitingOnHumanNotifier?: WaitingOnHumanNotifier
+  countdownScheduler?: CountdownScheduler
 }
 
 export interface TodoContinuationEnforcer {
@@ -23,8 +38,8 @@ export interface Todo {
 }
 
 export interface SessionState {
-  countdownTimer?: ReturnType<typeof setTimeout>
-  countdownInterval?: ReturnType<typeof setInterval>
+  countdownTimer?: CountdownTimerHandle
+  countdownInterval?: CountdownTimerHandle
   isRecovering?: boolean
   wasCancelled?: boolean
   tokenLimitDetected?: boolean

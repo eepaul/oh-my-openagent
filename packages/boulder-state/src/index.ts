@@ -2,6 +2,7 @@ export { BOULDER_DIR, BOULDER_FILE, BOULDER_STATE_PATH, NOTEPAD_BASE_PATH, NOTEP
 export { archiveBoulderState } from "./storage/archive-state"
 export { getPlanChecklist, parsePlanChecklist } from "./plan-checklist"
 export { readCurrentTopLevelTask } from "./top-level-task"
+export { isPlanLifecycleComplete, isPlanWaitingOnHuman } from "./waiting-on-human"
 export {
   addBoulderWork,
   appendSessionId,

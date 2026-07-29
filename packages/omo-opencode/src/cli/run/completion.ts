@@ -4,40 +4,56 @@ import { normalizeSDKResponse } from "../../shared"
 import {
   getContinuationState,
   type ContinuationState,
+  type WaitingBoulderContinuation,
 } from "./continuation-state"
 
-export async function checkCompletionConditions(ctx: RunContext): Promise<boolean> {
+export type CompletionCheckResult =
+  | "pending"
+  | "completed"
+  | { readonly waiting: WaitingBoulderContinuation }
+
+export async function checkCompletionConditions(ctx: RunContext): Promise<CompletionCheckResult> {
   try {
     const continuationState = await getContinuationState(ctx.directory, ctx.sessionID, ctx.client)
-
-    if (continuationState.hasActiveHookMarker) {
-      const reason = continuationState.activeHookMarkerReason ?? "continuation hook is active"
-      logWaiting(ctx, reason)
-      return false
-    }
-
-    if (!continuationState.hasTodoHookMarker && !await areAllTodosComplete(ctx)) {
-      return false
-    }
+    const waitingBoulder = getWaitingBoulderContinuation(continuationState)
 
     if (continuationState.hasActiveBackgroundTaskMarker) {
       logWaiting(ctx, continuationState.activeHookMarkerReason ?? "background tasks are active")
-      return false
+      return "pending"
+    }
+
+    if (continuationState.hasActiveHookMarker && !(waitingBoulder && continuationState.hasTodoHookMarker)) {
+      const reason = continuationState.activeHookMarkerReason ?? "continuation hook is active"
+      logWaiting(ctx, reason)
+      return "pending"
+    }
+
+    if (!waitingBoulder && !continuationState.hasTodoHookMarker && !await areAllTodosComplete(ctx)) {
+      return "pending"
     }
 
     if (!await areAllChildrenIdle(ctx)) {
-      return false
+      return "pending"
     }
 
     if (!areContinuationHooksIdle(ctx, continuationState)) {
-      return false
+      return "pending"
     }
 
-    return true
+    return waitingBoulder ? { waiting: waitingBoulder } : "completed"
   } catch (err) {
-    console.error(pc.red(`[completion] API error: ${err}`))
-    return false
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(pc.red(`[completion] API error: ${message}`))
+    return "pending"
   }
+}
+
+function getWaitingBoulderContinuation(
+  continuationState: ContinuationState,
+): WaitingBoulderContinuation | null {
+  return typeof continuationState.boulderContinuation === "string"
+    ? null
+    : continuationState.boulderContinuation.waiting
 }
 
 function areContinuationHooksIdle(

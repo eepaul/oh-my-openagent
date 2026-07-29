@@ -260,9 +260,9 @@ describe("handleAtlasSessionIdle completion nudge", () => {
 
     // then
     expect(promptAsyncMock).not.toHaveBeenCalled()
-    expect(getState(SESSION_ID).pendingRetryTimer).toBeUndefined()
+    expect(getState(SESSION_ID).pendingRetryTimer).toBe(retryTimer)
     expect(getState(SESSION_ID).boulderCompletionNudgedAt?.[workId]).toBeUndefined()
-    expect(readBoulderState(testDirectory)?.works?.[workId]?.status).toBe("completed")
+    expect(readBoulderState(testDirectory)?.works?.[workId]?.status).toBe("active")
   })
 
   it("#given abandoned work has complete plan progress #when completion handling runs #then abandoned status is preserved", async () => {

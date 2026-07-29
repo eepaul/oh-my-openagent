@@ -1,5 +1,6 @@
 import { statSync } from "node:fs"
 import { getPlanName, getPlanProgress } from "../../features/boulder-state"
+import { getPlanChecklist, isPlanLifecycleComplete, isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 
 function normalizePlanLookupValue(value: string): string {
   return value
@@ -51,17 +52,20 @@ export function formatIncompletePlanList(
   return plans
     .map((planPath, index) => {
       const progress = getPlanProgress(planPath)
+      const waitingStatus = isPlanWaitingOnHuman(planPath)
+        ? ` - waiting on human decision (${getPlanChecklist(planPath).blocked ?? 0} task(s) marked [~])`
+        : ""
       const modified = includeModifiedTime
         ? ` - Modified: ${new Date(statSync(planPath).mtimeMs).toISOString()}`
         : ""
 
-      return `${index + 1}. [${getPlanName(planPath)}]${modified} - Progress: ${progress.completed}/${progress.total}`
+      return `${index + 1}. [${getPlanName(planPath)}]${modified} - Progress: ${progress.completed}/${progress.total}${waitingStatus}`
     })
     .join("\n")
 }
 
 export function buildMissingPlanContext(explicitPlanName: string, allPlans: readonly string[]): string {
-  const incompletePlans = allPlans.filter((planPath) => !getPlanProgress(planPath).isComplete)
+  const incompletePlans = allPlans.filter((planPath) => !isPlanLifecycleComplete(planPath))
   if (incompletePlans.length > 0) {
     return `
 ## Plan Not Found

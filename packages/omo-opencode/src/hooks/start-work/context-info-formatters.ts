@@ -5,6 +5,7 @@ import {
   resolveBoulderPlanPath,
   writeBoulderState,
 } from "../../features/boulder-state"
+import { getPlanChecklist, isPlanLifecycleComplete, isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import type { BoulderState, BoulderWorkResumeOption } from "../../features/boulder-state"
 import { createWorktreeActiveBlock } from "./worktree-block"
 import { ensureNotepadScaffold } from "./notepad-scaffold"
@@ -19,13 +20,15 @@ export function buildAutoSelectedPlanContextInfoOnly(params: {
   const { planPath, sessionId, timestamp, worktreeBlock, reason } = params
   const progress = getPlanProgress(planPath)
   const reasonLine = reason ? `**Reason**: ${reason}\n` : ""
+  const waitingStatus = formatWaitingOnHumanStatus(planPath)
+  const waitingStatusLine = waitingStatus ? `**Status**: ${waitingStatus}\n` : ""
 
   return `
 ## Auto-Selected Plan
 
 **Plan**: ${getPlanName(planPath)}
 **Path**: ${planPath}
-**Progress**: ${progress.completed}/${progress.total} tasks
+${waitingStatusLine}**Progress**: ${progress.completed}/${progress.total} tasks
 **Session ID**: ${sessionId}
 **Started**: ${timestamp}
 ${reasonLine}${worktreeBlock}
@@ -95,13 +98,14 @@ export function buildExistingSessionContext(params: {
   const { existingState, sessionId, activeAgent, worktreePath, worktreeBlock, directory } = params
   const planPath = resolveBoulderPlanPath(directory, existingState)
   const progress = getPlanProgress(planPath)
-  if (progress.isComplete) {
+  if (isPlanLifecycleComplete(planPath)) {
     return `
 ## Previous Work Complete
 
 The previous plan (${existingState.plan_name}) has been completed.
 Looking for new plans...`
   }
+  const waitingStatus = formatWaitingOnHumanStatus(planPath)
 
   const effectiveWorktree = worktreePath ?? existingState.worktree_path
   const sessionAlreadyTracked = existingState.session_ids.includes(sessionId)
@@ -130,7 +134,7 @@ Looking for new plans...`
   return `
 ## Active Work Session Found
 
-**Status**: RESUMING existing work
+**Status**: RESUMING existing work${waitingStatus ? ` - ${waitingStatus}` : ""}
 **Plan**: ${existingState.plan_name}
 **Path**: ${planPath}
 **Progress**: ${progress.completed}/${progress.total} tasks completed
@@ -140,4 +144,13 @@ ${worktreeDisplay}
 
 The current session (${sessionId}) has been added to session_ids.
 Read the plan file and continue from the first unchecked task.`
+}
+
+function formatWaitingOnHumanStatus(planPath: string): string | null {
+  if (!isPlanWaitingOnHuman(planPath)) {
+    return null
+  }
+
+  const blockedCount = getPlanChecklist(planPath).blocked ?? 0
+  return `waiting on human decision (${blockedCount} task(s) marked [~])`
 }

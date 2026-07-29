@@ -37,6 +37,7 @@ export async function injectBoulderContinuation(input: {
   backgroundManager?: BackgroundTaskStatusProvider
   sessionState: SessionState
   idleSettleMs?: number
+  preDispatchGuard?: () => boolean
 }): Promise<BoulderContinuationResult> {
   const {
     ctx,
@@ -51,6 +52,7 @@ export async function injectBoulderContinuation(input: {
     backgroundManager,
     sessionState,
     idleSettleMs,
+    preDispatchGuard,
   } = input
 
   const hasRunningBgTasks = backgroundManager
@@ -103,6 +105,7 @@ export async function injectBoulderContinuation(input: {
       settleMs: idleSettleMs,
       queueBehavior: "defer",
       semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
+      ...(preDispatchGuard === undefined ? {} : { preDispatchGuard }),
       input: {
         path: { id: sessionID },
         body: {

@@ -152,6 +152,7 @@ async function drainPromptQueue(sessionID: string, awaitedEntry?: QueuedInternal
         dispatchTimeoutMs: entry.dispatchTimeoutMs,
         checkStatus: entry.checkStatus,
         checkToolState: entry.checkToolState,
+        ...(entry.preDispatchGuard === undefined ? {} : { preDispatchGuard: entry.preDispatchGuard }),
         dispatch: entry.dispatch,
       })
       if (promptQueueInFlight.get(sessionID)?.id === entry.id) {

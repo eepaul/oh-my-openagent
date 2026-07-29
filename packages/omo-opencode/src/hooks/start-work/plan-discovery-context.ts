@@ -1,7 +1,7 @@
 import {
   findPrometheusPlans,
-  getPlanProgress,
 } from "../../features/boulder-state"
+import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import type { BoulderState, BoulderWorkResumeOption } from "../../features/boulder-state"
 import { buildAutoSelectedPlanContextWithStateInit } from "./work-initializer"
 import { formatIncompletePlanList, pickPreferredIncompletePlan } from "./plan-selection"
@@ -15,7 +15,7 @@ export function shouldResumeExistingState(input: {
     return false
   }
 
-  if (getPlanProgress(existingState.active_plan).isComplete) {
+  if (isPlanLifecycleComplete(existingState.active_plan)) {
     return false
   }
 
@@ -46,7 +46,7 @@ export function shouldResumeSingleWorkOption(input: {
   }
 
   return !findPrometheusPlans(directory).some(
-    (planPath) => planPath === preferredPlanPath && !getPlanProgress(planPath).isComplete,
+    (planPath) => planPath === preferredPlanPath && !isPlanLifecycleComplete(planPath),
   )
 }
 
@@ -71,7 +71,7 @@ export function buildPlanDiscoveryContext(params: {
     preferredPlanPath,
   } = params
   const plans = findPrometheusPlans(directory)
-  const incompletePlans = plans.filter((planPath) => !getPlanProgress(planPath).isComplete)
+  const incompletePlans = plans.filter((planPath) => !isPlanLifecycleComplete(planPath))
   const preferredIncompletePlan = pickPreferredIncompletePlan(incompletePlans, preferredPlanPath)
 
   if (plans.length === 0) {

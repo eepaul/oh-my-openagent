@@ -187,8 +187,8 @@ export async function pollForCompletion(
       }
     }
 
-    const shouldExit = await checkCompletionConditions(ctx)
-    if (shouldExit) {
+    const completionResult = await checkCompletionConditions(ctx)
+    if (completionResult === "completed") {
       if (abortController.signal.aborted) {
         return 130
       }
@@ -198,6 +198,17 @@ export async function pollForCompletion(
         console.log(pc.green("\n\nAll tasks completed."))
         return 0
       }
+    } else if (completionResult !== "pending") {
+      if (abortController.signal.aborted) {
+        return 130
+      }
+
+      console.log(
+        pc.yellow(
+          `\n\nPlan "${completionResult.waiting.planName}" is waiting on a human decision (${completionResult.waiting.blockedCount} task(s) marked [~]).`,
+        ),
+      )
+      return 0
     } else {
       consecutiveCompleteChecks = 0
     }

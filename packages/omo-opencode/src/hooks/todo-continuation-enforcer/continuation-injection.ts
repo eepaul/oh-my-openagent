@@ -1,6 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 
 import type { BackgroundManager } from "../../features/background-agent"
+import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
 import {
   getSessionAgent,
   handedBackSyncSessions,
@@ -37,6 +38,7 @@ import { isTokenLimitError } from "./token-limit-detection"
 import { getIncompleteCount } from "./todo"
 import type { ResolvedMessageInfo, Todo } from "./types"
 import type { SessionStateStore } from "./session-state"
+import { getWaitingOnHumanPlanForSession, notifyWaitingOnHuman } from "./waiting-on-human-plan"
 
 function hasWritePermission(tools: Record<string, ToolPermission> | undefined): boolean {
   const editPermission = tools?.edit
@@ -55,6 +57,7 @@ export async function injectContinuation(args: {
   resolvedInfo?: ResolvedMessageInfo
   sessionStateStore: SessionStateStore
   isContinuationStopped?: (sessionID: string) => boolean
+  waitingOnHumanNotifier?: WaitingOnHumanNotifier
 }): Promise<void> {
   const {
     ctx,
@@ -64,6 +67,7 @@ export async function injectContinuation(args: {
     resolvedInfo,
     sessionStateStore,
     isContinuationStopped,
+    waitingOnHumanNotifier,
   } = args
 
   const state = sessionStateStore.getExistingState(sessionID)
@@ -197,6 +201,29 @@ ${todoList}`
     return
   }
 
+  if (isContinuationStopped?.(sessionID)) {
+    log(`[${HOOK_NAME}] Skipped injection: continuation stopped before prompt`, { sessionID })
+    return
+  }
+
+  const waitingPlan = getWaitingOnHumanPlanForSession(ctx.directory, sessionID)
+  if (waitingPlan) {
+    sessionStateStore.cancelCountdown(sessionID)
+    await notifyWaitingOnHuman({
+      ctx,
+      sessionID,
+      waitingPlan,
+      notifier: waitingOnHumanNotifier,
+      isContinuationStopped,
+    })
+    log(`[${HOOK_NAME}] Skipped injection: boulder plan waiting on a human decision`, {
+      sessionID,
+      planPath: waitingPlan.planPath,
+      blockedCount: waitingPlan.blockedCount,
+    })
+    return
+  }
+
   if (injectionState) {
     injectionState.inFlight = true
   }
@@ -224,6 +251,9 @@ ${todoList}`
       settleMs: 0,
       queueBehavior: "defer",
       semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
+      preDispatchGuard: () =>
+        isContinuationStopped?.(sessionID) !== true
+        && getWaitingOnHumanPlanForSession(ctx.directory, sessionID) === undefined,
       input: {
         path: { id: sessionID },
         body: {

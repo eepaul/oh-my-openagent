@@ -1,10 +1,10 @@
 import {
   getActiveWorks,
-  getPlanProgress,
   getWorkResumeOptions,
   readBoulderState,
   selectActiveWork,
 } from "../../features/boulder-state"
+import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import type { BoulderState } from "../../features/boulder-state"
 import { log } from "../../shared/logger"
 import type { PluginInput } from "@opencode-ai/plugin"
@@ -157,7 +157,7 @@ function buildSelectedContextInfo(params: {
     })
   }
 
-  if (existingState && !getPlanProgress(existingState.active_plan).isComplete) {
+  if (existingState && !isPlanLifecycleComplete(existingState.active_plan)) {
     log(`[${HOOK_NAME}] Ignoring unrelated active boulder state for this session`, {
       sessionID: sessionId,
       activePlan: existingState.active_plan,

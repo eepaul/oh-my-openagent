@@ -85,7 +85,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when boulder exists but is complete", async () => {
@@ -103,7 +103,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns true when the mirrored worktree plan is complete even if the main repo plan is stale", async () => {
@@ -138,7 +138,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when current session is an appended descendant of an active boulder session with unchecked plan items", async () => {
@@ -174,7 +174,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when current session is only in lineage and is not explicitly tracked in boulder", async () => {
@@ -202,7 +202,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns true when appended descendant has agent mismatch and atlas would not continue it", async () => {
@@ -237,7 +237,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns true when mismatched descendant was already appended into boulder session_ids", async () => {
@@ -272,7 +272,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns true when appended descendant cannot prove lineage because parent lookup fails", async () => {
@@ -304,7 +304,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when current session is directly tracked in boulder session_ids even if it has a parent session", async () => {
@@ -331,7 +331,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns false when current session is directly tracked among multiple boulder session_ids and has no parent session", async () => {
@@ -361,7 +361,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when multi-session tracked child is missing provenance and lineage cannot be proven", async () => {
@@ -385,7 +385,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when directly tracked child session has a tracked ancestor and mismatched agent metadata", async () => {
@@ -420,7 +420,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns false when latest appended descendant message is compaction but previous real agent still matches atlas", async () => {
@@ -459,7 +459,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true for untracked descendant continuation on SQLite-shaped misordered messages because lineage alone is no longer sufficient", async () => {
@@ -495,7 +495,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when appended tracked descendant has no persisted messages but in-memory session agent matches atlas", async () => {
@@ -527,7 +527,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns false when active ralph-loop continuation exists for this session", async () => {
@@ -550,7 +550,7 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when active ralph-loop is bound to another session", async () => {
@@ -573,6 +573,6 @@ describe("checkCompletionConditions continuation coverage", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 })

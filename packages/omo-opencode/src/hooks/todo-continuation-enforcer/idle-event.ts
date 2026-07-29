@@ -12,12 +12,15 @@ import { isLastAssistantMessageAborted } from "./abort-detection"
 import { acknowledgeCompactionGuard, isCompactionGuardActive } from "./compaction-guard"
 import { ABORT_WINDOW_MS, CONTINUATION_COOLDOWN_MS, DEFAULT_SKIP_AGENTS, FAILURE_RESET_WINDOW_MS, HOOK_NAME, MAX_CONSECUTIVE_FAILURES } from "./constants"
 import { startCountdown } from "./countdown"
+import { systemCountdownScheduler } from "./countdown-scheduler"
 import { hasUnansweredQuestion } from "./pending-question-detection"
 import { resolveLatestMessageInfo } from "./resolve-message-info"
 import type { SessionStateStore } from "./session-state"
 import { shouldStopForStagnation } from "./stagnation-detection"
 import { getIncompleteCount } from "./todo"
-import type { MessageWithInfo, ResolvedMessageInfo, Todo } from "./types"
+import type { CountdownScheduler, MessageWithInfo, ResolvedMessageInfo, Todo } from "./types"
+import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
+import { getWaitingOnHumanPlan, notifyWaitingOnHuman } from "./waiting-on-human-plan"
 
 export async function handleSessionIdle(args: {
   ctx: PluginInput
@@ -26,6 +29,8 @@ export async function handleSessionIdle(args: {
   backgroundManager?: BackgroundManager
   skipAgents?: string[]
   isContinuationStopped?: (sessionID: string) => boolean
+  waitingOnHumanNotifier?: WaitingOnHumanNotifier
+  countdownScheduler?: CountdownScheduler
 }): Promise<void> {
   const {
     ctx,
@@ -34,6 +39,8 @@ export async function handleSessionIdle(args: {
     backgroundManager,
     skipAgents = DEFAULT_SKIP_AGENTS,
     isContinuationStopped,
+    waitingOnHumanNotifier,
+    countdownScheduler = systemCountdownScheduler,
   } = args
 
   log(`[${HOOK_NAME}] session.idle`, { sessionID })
@@ -76,6 +83,11 @@ export async function handleSessionIdle(args: {
     state.abortDetectedAt = undefined
   }
 
+  if (isContinuationStopped?.(sessionID)) {
+    log(`[${HOOK_NAME}] Skipped: continuation stopped for session`, { sessionID })
+    return
+  }
+
   const boulderWork = getWorkForSession(ctx.directory, sessionID)
   if (boulderWork) {
     const planPath = resolveBoulderPlanPathForWork(ctx.directory, boulderWork)
@@ -86,6 +98,26 @@ export async function handleSessionIdle(args: {
       })
       return
     }
+
+    const waitingPlan = getWaitingOnHumanPlan(planPath, boulderWork.plan_name)
+    if (waitingPlan) {
+      sessionStateStore.cancelCountdown(sessionID)
+      await notifyWaitingOnHuman({
+        ctx,
+        sessionID,
+        waitingPlan,
+        notifier: waitingOnHumanNotifier,
+        isContinuationStopped,
+      })
+      log(`[${HOOK_NAME}] Skipped: boulder plan waiting on a human decision`, {
+        sessionID,
+        planPath,
+        blockedCount: waitingPlan.blockedCount,
+      })
+      return
+    }
+
+    waitingOnHumanNotifier?.reset(sessionID)
   }
 
   const hasRunningBgTasks = backgroundManager
@@ -223,11 +255,6 @@ export async function handleSessionIdle(args: {
     return
   }
 
-  if (isContinuationStopped?.(sessionID)) {
-    log(`[${HOOK_NAME}] Skipped: continuation stopped for session`, { sessionID })
-    return
-  }
-
   const progressUpdate = sessionStateStore.trackContinuationProgress(
     sessionID,
     incompleteCount,
@@ -254,5 +281,7 @@ export async function handleSessionIdle(args: {
     skipAgents,
     sessionStateStore,
     isContinuationStopped,
+    waitingOnHumanNotifier,
+    countdownScheduler,
   })
 }

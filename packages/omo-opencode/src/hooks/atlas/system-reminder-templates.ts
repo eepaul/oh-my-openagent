@@ -34,6 +34,9 @@ RULES:
 - If a task is blocked by missing external input, unavailable credentials, access limits, or a decision only the user can make, you MUST edit the plan file in this turn and change that task's checkbox from \`- [ ]\` to \`- [~]\` before moving on
 - A text-only explanation of a blocker is NOT progress. The \`- [~]\` checkbox edit is mandatory and must happen via a real file-editing tool call`
 
+export const WAITING_ON_HUMAN_PROMPT =
+  'Plan "{PLAN_NAME}" is blocked on a human decision ({BLOCKED_COUNT} task(s) marked [~]). Waiting - no action required.'
+
 export const BOULDER_COMPLETE_PROMPT = `<system-reminder>
 BOULDER COMPLETE: plan "{PLAN_NAME}" is fully checked.
 

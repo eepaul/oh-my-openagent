@@ -53,6 +53,7 @@ export interface PlanChecklist {
   total: number
   completed: number
   remaining: number
+  blocked?: number
   nextTaskLabel: string | null
 }
 
@@ -159,6 +160,8 @@ export declare function getWorkByPlanName(
 ): BoulderWorkState | null
 export declare function getWorkForSession(directory: string, sessionId: string): BoulderWorkState | null
 export declare function getWorkResumeOptions(directory: string): BoulderWorkResumeOption[]
+export declare function isPlanLifecycleComplete(planPath: string): boolean
+export declare function isPlanWaitingOnHuman(planPath: string): boolean
 export declare function normalizeSessionId(sessionId: string, platform?: "codex" | "opencode" | "senpi"): string
 export declare function readBoulderState(directory: string): BoulderState | null
 export declare function resolveBoulderPlanPath(

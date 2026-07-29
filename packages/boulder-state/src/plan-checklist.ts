@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 
+import { isBlockedSimpleCheckbox, isBlockedStructuredCheckbox } from "./plan-checklist-blocked"
 import type { PlanChecklist, TopLevelTaskRef } from "./types"
 
 const SIMPLE_CHECKBOX_PATTERN = /^[-*][ \t]*\[[ \t]*([xX]?)[ \t]*\][ \t]+(.+)$/
@@ -66,6 +67,7 @@ export function parseCurrentTopLevelTask(markdown: string): TopLevelTaskRef | nu
 }
 
 function parseStructuredPlan(lines: readonly string[]): ParsedStructuredPlan {
+  let blocked = 0
   let remaining = 0
   let total = 0
   let nextTaskLabel: string | null = null
@@ -95,6 +97,11 @@ function parseStructuredPlan(lines: readonly string[]): ParsedStructuredPlan {
       continue
     }
 
+    if (isBlockedStructuredCheckbox(line, section)) {
+      blocked += 1
+      continue
+    }
+
     const checkbox = parseStructuredTopLevelCheckbox(line, section)
     if (checkbox === null) {
       continue
@@ -115,6 +122,7 @@ function parseStructuredPlan(lines: readonly string[]): ParsedStructuredPlan {
   return {
     checklist: {
       completed: total - remaining,
+      blocked,
       remaining,
       total,
       nextTaskLabel,
@@ -124,6 +132,7 @@ function parseStructuredPlan(lines: readonly string[]): ParsedStructuredPlan {
 }
 
 function parseSimpleChecklist(lines: readonly string[]): PlanChecklist {
+  let blocked = 0
   let remaining = 0
   let total = 0
   let nextTaskLabel: string | null = null
@@ -143,6 +152,11 @@ function parseSimpleChecklist(lines: readonly string[]): PlanChecklist {
       continue
     }
 
+    if (isBlockedSimpleCheckbox(line)) {
+      blocked += 1
+      continue
+    }
+
     const checkbox = parseSimpleTopLevelCheckbox(line)
     if (checkbox === null) {
       continue
@@ -159,7 +173,7 @@ function parseSimpleChecklist(lines: readonly string[]): PlanChecklist {
     }
   }
 
-  return { completed: total - remaining, remaining, total, nextTaskLabel }
+  return { blocked, completed: total - remaining, remaining, total, nextTaskLabel }
 }
 
 function parseSimpleTopLevelCheckbox(line: string): ParsedCheckbox | null {
@@ -260,5 +274,5 @@ function isClosingFence(line: string, fence: MarkdownFence): boolean {
 }
 
 function emptyChecklist(): PlanChecklist {
-  return { completed: 0, remaining: 0, total: 0, nextTaskLabel: null }
+  return { blocked: 0, completed: 0, remaining: 0, total: 0, nextTaskLabel: null }
 }

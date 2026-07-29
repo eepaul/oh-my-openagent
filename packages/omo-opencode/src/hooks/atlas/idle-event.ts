@@ -1,4 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
+import { isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import {
   getWorkForSession,
   normalizeSessionId,
@@ -24,6 +25,7 @@ import {
   updateNoToolProgressIterations,
 } from "./tool-progress"
 import type { AtlasHookOptions, SessionState } from "./types"
+import { notifyAtlasWaitingOnHuman } from "./waiting-on-human-gate"
 
 export async function handleAtlasSessionIdle(input: {
   ctx: PluginInput
@@ -48,6 +50,26 @@ export async function handleAtlasSessionIdle(input: {
   }
 
   const { boulderState, progress, appendedSession } = activeBoulderSession
+  const activePlanPath = resolveBoulderPlanPath(ctx.directory, boulderState)
+  if (options?.isContinuationStopped?.(sessionID)) {
+    log(`[${HOOK_NAME}] Skipped: continuation stopped for session`, { sessionID })
+    return
+  }
+
+  if (isPlanWaitingOnHuman(activePlanPath)) {
+    await notifyAtlasWaitingOnHuman({
+      ctx,
+      sessionID,
+      sessionState,
+      options,
+      planPath: activePlanPath,
+      planName: boulderState.plan_name,
+      settleMs: options?.idleSettleMs,
+    })
+    return
+  }
+  options?.waitingOnHumanNotifier?.reset(sessionID)
+
   if (progress.isComplete) {
     await handleCompletedBoulderIdle({ ctx, options, sessionID, sessionState, boulderState })
     return
@@ -76,7 +98,6 @@ export async function handleAtlasSessionIdle(input: {
   }
 
   const now = Date.now()
-  const activePlanPath = resolveBoulderPlanPath(ctx.directory, boulderState)
   resetStallStateForPlanChange(sessionState, activePlanPath)
 
   const finalWaveWorkId = boulderState.active_work_id
@@ -146,11 +167,6 @@ export async function handleAtlasSessionIdle(input: {
   if (hasRunningBackgroundTasks(sessionID, options)) {
     scheduleRetry({ ctx, sessionID, sessionState, options })
     log(`[${HOOK_NAME}] Skipped: background tasks running`, { sessionID })
-    return
-  }
-
-  if (options?.isContinuationStopped?.(sessionID)) {
-    log(`[${HOOK_NAME}] Skipped: continuation stopped for session`, { sessionID })
     return
   }
 

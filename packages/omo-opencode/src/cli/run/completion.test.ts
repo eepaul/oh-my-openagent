@@ -40,7 +40,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when incomplete todos exist", async () => {
@@ -58,7 +58,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when all todos completed or cancelled", async () => {
@@ -76,7 +76,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when child session is busy", async () => {
@@ -95,7 +95,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when all children idle", async () => {
@@ -118,7 +118,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when grandchild is busy (recursive)", async () => {
@@ -141,7 +141,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when child status is missing but descendants are idle", async () => {
@@ -160,7 +160,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 
   it("returns false when descendant is busy even if parent status is missing", async () => {
@@ -182,7 +182,7 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
   })
 
   it("returns true when all descendants idle (recursive)", async () => {
@@ -207,6 +207,6 @@ describe("checkCompletionConditions", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(true)
+    expect(result).toBe("completed")
   })
 })

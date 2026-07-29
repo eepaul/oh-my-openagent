@@ -1,10 +1,7 @@
-import type { SessionState, Todo } from "./types"
+import { systemCountdownScheduler } from "./countdown-scheduler"
+import type { CountdownScheduler, CountdownTimerHandle, SessionState, Todo } from "./types"
 
-type TimerHandle = number | { unref?: () => void }
-
-declare function setInterval(callback: () => void, delay?: number): TimerHandle
-declare function clearInterval(timeout: TimerHandle): void
-declare function clearTimeout(timeout: TimerHandle): void
+type TimerHandle = CountdownTimerHandle
 
 // TTL for idle session state entries (10 minutes)
 const SESSION_STATE_TTL_MS = 10 * 60 * 1000
@@ -27,6 +24,7 @@ export interface ContinuationProgressUpdate {
 }
 
 export interface SessionStateStore {
+  readonly countdownScheduler: CountdownScheduler
   getState: (sessionID: string) => SessionState
   getExistingState: (sessionID: string) => SessionState | undefined
   startPruneInterval: () => void
@@ -56,7 +54,9 @@ function getTodoSnapshot(todos: Todo[]): string {
   return entries.join("|")
 }
 
-export function createSessionStateStore(): SessionStateStore {
+export function createSessionStateStore(
+  countdownScheduler: CountdownScheduler = systemCountdownScheduler,
+): SessionStateStore {
   const sessions = new Map<string, TrackedSessionState>()
 
   // Periodic pruning of stale session states to prevent unbounded Map growth
@@ -69,7 +69,7 @@ export function createSessionStateStore(): SessionStateStore {
     }
 
     pruneIntervalStarted = true
-    pruneInterval = setInterval(() => {
+    pruneInterval = countdownScheduler.setInterval(() => {
       const now = Date.now()
       for (const [sessionID, tracked] of sessions.entries()) {
         if (now - tracked.lastAccessedAt > SESSION_STATE_TTL_MS) {
@@ -226,12 +226,12 @@ export function createSessionStateStore(): SessionStateStore {
 
     const state = tracked.state
     if (state.countdownTimer) {
-      clearTimeout(state.countdownTimer)
+      countdownScheduler.clearTimeout(state.countdownTimer)
       state.countdownTimer = undefined
     }
 
     if (state.countdownInterval) {
-      clearInterval(state.countdownInterval)
+      countdownScheduler.clearInterval(state.countdownInterval)
       state.countdownInterval = undefined
     }
 
@@ -252,13 +252,14 @@ export function createSessionStateStore(): SessionStateStore {
 
   function shutdown(): void {
     if (pruneInterval !== undefined) {
-      clearInterval(pruneInterval)
+      countdownScheduler.clearInterval(pruneInterval)
     }
     cancelAllCountdowns()
     sessions.clear()
   }
 
   return {
+    countdownScheduler,
     getState,
     getExistingState,
     startPruneInterval,

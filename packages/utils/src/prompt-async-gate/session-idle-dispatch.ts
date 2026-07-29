@@ -23,6 +23,7 @@ export async function dispatchAfterSessionIdle<TInput>(args: {
   readonly dispatchTimeoutMs: number
   readonly checkStatus: boolean
   readonly checkToolState: boolean
+  readonly preDispatchGuard?: () => boolean
   readonly dispatch: (input: TInput) => Promise<unknown>
 }): Promise<InternalPromptDispatchResult> {
   const {
@@ -38,6 +39,7 @@ export async function dispatchAfterSessionIdle<TInput>(args: {
     dispatchTimeoutMs,
     checkStatus,
     checkToolState,
+    preDispatchGuard,
     dispatch,
   } = args
 
@@ -105,6 +107,10 @@ export async function dispatchAfterSessionIdle<TInput>(args: {
         source,
       })
       return { status: "active" }
+    }
+
+    if (preDispatchGuard?.() === false) {
+      return { status: "guard_rejected" }
     }
 
     log(`[prompt-async-gate] ${sessionName} dispatching`, { sessionID, source })

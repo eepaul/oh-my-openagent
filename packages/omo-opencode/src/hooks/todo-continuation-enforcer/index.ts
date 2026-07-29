@@ -17,9 +17,11 @@ export function createTodoContinuationEnforcer(
     backgroundManager,
     skipAgents = DEFAULT_SKIP_AGENTS,
     isContinuationStopped,
+    waitingOnHumanNotifier,
+    countdownScheduler,
   } = options
 
-  const sessionStateStore = createSessionStateStore()
+  const sessionStateStore = createSessionStateStore(countdownScheduler)
 
   const markRecovering = (sessionID: string): void => {
     const state = sessionStateStore.getState(sessionID)
@@ -42,6 +44,8 @@ export function createTodoContinuationEnforcer(
     backgroundManager,
     skipAgents,
     isContinuationStopped,
+    waitingOnHumanNotifier,
+    countdownScheduler,
   })
 
   const cancelAllCountdowns = (): void => {

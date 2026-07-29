@@ -49,7 +49,7 @@ describe("checkCompletionConditions verbose waiting logs", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
     expect(consoleLogSpy).not.toHaveBeenCalled()
   })
 
@@ -71,7 +71,7 @@ describe("checkCompletionConditions verbose waiting logs", () => {
     const result = await checkCompletionConditions(ctx)
 
     // then
-    expect(result).toBe(false)
+    expect(result).toBe("pending")
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining("Waiting: session child-1... is busy")
     )

@@ -1,4 +1,5 @@
-import { getPlanProgress, normalizeSessionId, readBoulderState, resolveBoulderPlanPath } from "../../features/boulder-state"
+import { normalizeSessionId, readBoulderState, resolveBoulderPlanPath } from "../../features/boulder-state"
+import { getPlanChecklist, isPlanLifecycleComplete, isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import { getSessionAgent } from "../../features/claude-code-session-state"
 import {
   getActiveContinuationMarkerReason,
@@ -19,7 +20,18 @@ export interface ContinuationState {
   hasActiveBackgroundTaskMarker: boolean
   hasActiveHookMarker: boolean
   activeHookMarkerReason: string | null
+  boulderContinuation: BoulderContinuationClassification
 }
+
+export interface WaitingBoulderContinuation {
+  readonly planName: string
+  readonly blockedCount: number
+}
+
+export type BoulderContinuationClassification =
+  | "none"
+  | "active"
+  | { readonly waiting: WaitingBoulderContinuation }
 
 export async function getContinuationState(
   directory: string,
@@ -27,56 +39,54 @@ export async function getContinuationState(
   client?: RunContext["client"],
 ): Promise<ContinuationState> {
   const marker = readContinuationMarker(directory, sessionID)
+  const boulderContinuation = await classifyBoulderContinuation(directory, sessionID, client)
 
   return {
-    hasActiveBoulder: await hasActiveBoulderContinuation(directory, sessionID, client),
+    hasActiveBoulder: boulderContinuation === "active",
     hasActiveRalphLoop: hasActiveRalphLoopContinuation(directory, sessionID),
     hasHookMarker: marker !== null,
     hasTodoHookMarker: marker?.sources.todo !== undefined,
     hasActiveBackgroundTaskMarker: marker?.sources["background-task"]?.state === "active",
     hasActiveHookMarker: isContinuationMarkerActive(marker),
     activeHookMarkerReason: getActiveContinuationMarkerReason(marker),
+    boulderContinuation,
   }
 }
 
-async function hasActiveBoulderContinuation(
+export async function classifyBoulderContinuation(
   directory: string,
   sessionID: string,
   client?: RunContext["client"],
-): Promise<boolean> {
+): Promise<BoulderContinuationClassification> {
   const boulder = readBoulderState(directory)
-  if (!boulder) return false
-
-  const progress = getPlanProgress(resolveBoulderPlanPath(directory, boulder))
-  if (progress.isComplete) return false
-  if (!client) return false
+  if (!boulder || !client) return "none"
 
   const normalizedSessionID = normalizeSessionId(sessionID)
   const normalizedTrackedSessionIDs = boulder.session_ids.map((trackedSessionID) => normalizeSessionId(trackedSessionID))
   if (!normalizedTrackedSessionIDs.includes(normalizedSessionID)) {
-    return false
+    return "none"
   }
 
   const sessionOrigin = boulder.session_origins?.[sessionID] ?? boulder.session_origins?.[normalizedSessionID]
   if (sessionOrigin === "direct") {
-    return true
+    return classifyBoundBoulderContinuation(directory, boulder)
   }
 
   const trackedAncestorSessionIDs = normalizedTrackedSessionIDs
     .filter((trackedSessionID) => trackedSessionID !== normalizedSessionID)
   if (trackedAncestorSessionIDs.length === 0) {
-    return true
+    return classifyBoundBoulderContinuation(directory, boulder)
   }
 
   const isTrackedDescendant = await isTrackedDescendantSession(client, sessionID, trackedAncestorSessionIDs)
   if (!isTrackedDescendant) {
-    return false
+    return "none"
   }
 
   const sessionAgent = await getLastAgentFromSession(sessionID, client)
     ?? getSessionAgent(sessionID)
   if (!sessionAgent) {
-    return false
+    return "none"
   }
 
   const requiredAgentKey = getAgentConfigKey(boulder.agent ?? "atlas")
@@ -85,10 +95,27 @@ async function hasActiveBoulderContinuation(
     sessionAgentKey !== requiredAgentKey
     && !(requiredAgentKey === getAgentConfigKey("atlas") && sessionAgentKey === getAgentConfigKey("sisyphus"))
   ) {
-    return false
+    return "none"
   }
 
-  return true
+  return classifyBoundBoulderContinuation(directory, boulder)
+}
+
+function classifyBoundBoulderContinuation(
+  directory: string,
+  boulder: NonNullable<ReturnType<typeof readBoulderState>>,
+): BoulderContinuationClassification {
+  const planPath = resolveBoulderPlanPath(directory, boulder)
+  if (isPlanWaitingOnHuman(planPath)) {
+    return {
+      waiting: {
+        planName: boulder.plan_name,
+        blockedCount: getPlanChecklist(planPath).blocked ?? 0,
+      },
+    }
+  }
+
+  return isPlanLifecycleComplete(planPath) ? "none" : "active"
 }
 
 async function isTrackedDescendantSession(
