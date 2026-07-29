@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking**: `shared/<name>` skill invocations and `disabled_skills: ["shared/<name>"]` entries no longer resolve. Skills from the shared catalog now register under their bare name (e.g. `ulw-plan`, `frontend`). Update configs and prompts to use bare names. (PR #6180)
 
+### Fixed
+
+- `/stop-continuation` no longer deletes `.omo/boulder.json`; it archives to `boulder.json.stopped-<timestamp>` and reports the archive result.
+
 ## [4.14.0] - 2026-06-29
 
 ### Added

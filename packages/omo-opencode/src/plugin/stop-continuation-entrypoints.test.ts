@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -13,6 +13,13 @@ import {
 import type { PluginContext } from "./types"
 import { createChatMessageHandler } from "./chat-message"
 import { createCommandExecuteBeforeHandler } from "./command-execute-before"
+import {
+  ARCHIVE_SCENARIOS,
+  STOP_ENTRYPOINTS,
+  expectArchiveOutcome,
+  prepareArchiveScenario,
+  runStopEntrypoint,
+} from "./stop-continuation-entrypoints-archive-fixtures.test"
 import { createToolExecuteBeforeHandler } from "./tool-execute-before"
 
 type StopCalls = {
@@ -68,6 +75,7 @@ describe("stop continuation entrypoints", () => {
   })
 
   afterEach(() => {
+    mock.restore()
     rmSync(testDirectory, { recursive: true, force: true })
   })
 
@@ -189,5 +197,30 @@ describe("stop continuation entrypoints", () => {
     expect(calls.cancelledCountdowns).toEqual(["cancelled"])
     expect(calls.clearedGoals).toEqual(["ses-stop"])
     expect(readBoulderState(testDirectory)).toBeNull()
+  })
+
+  test("#given every stop entrypoint #when boulder archival succeeds, is absent, or fails #then each reports the actual outcome", async () => {
+    // given
+    for (const entrypoint of STOP_ENTRYPOINTS) {
+      for (const scenario of ARCHIVE_SCENARIOS) {
+        mock.restore()
+        rmSync(join(testDirectory, ".omo"), { recursive: true, force: true })
+        const fixture = prepareArchiveScenario({ directory: testDirectory, scenario })
+        const { calls, hooks } = createStopHooks()
+
+        // when
+        const notice = await runStopEntrypoint({
+          directory: testDirectory,
+          entrypoint,
+          hooks,
+        })
+
+        // then
+        expect(calls.stoppedSessions).toEqual(["ses-stop"])
+        expect(calls.cancelledCountdowns).toEqual(["cancelled"])
+        expect(calls.clearedGoals).toEqual(["ses-stop"])
+        expectArchiveOutcome({ directory: testDirectory, fixture, notice })
+      }
+    }
   })
 })

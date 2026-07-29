@@ -128,6 +128,7 @@ export declare function appendSessionIdForWork(
   sessionId: string,
   origin?: BoulderSessionOrigin,
 ): BoulderState | null
+export declare function archiveBoulderState(directory: string, now?: () => Date): string | null
 export declare function clearBoulderState(directory: string): boolean
 export declare function completeBoulder(directory: string, workId?: string, endedAt?: string): BoulderState | null
 export declare function createBoulderState(

@@ -3,7 +3,7 @@ import type { PluginContext } from "./types"
 import { getMainSessionID } from "../features/claude-code-session-state"
 import { log, replaceToolArgs } from "../shared"
 import { resolveSessionAgent } from "./session-agent-resolver"
-import { stopContinuation } from "./stop-continuation"
+import { formatBoulderArchiveNotice, stopContinuation } from "./stop-continuation"
 
 import type { CreatedHooks } from "../create-hooks"
 import type { BackgroundManager } from "../features/background-agent"
@@ -125,7 +125,15 @@ export function createToolExecuteBeforeHandler(args: {
       const sessionID = input.sessionID || getMainSessionID()
 
       if (command === "stop-continuation" && sessionID) {
-        stopContinuation({ directory: ctx.directory, hooks, sessionID })
+        const result = stopContinuation({ directory: ctx.directory, hooks, sessionID })
+        const existingUserMessage = typeof output.args.user_message === "string"
+          ? output.args.user_message
+          : ""
+        replaceToolArgs(output, {
+          user_message: [existingUserMessage, formatBoulderArchiveNotice(result)]
+            .filter((message) => message.length > 0)
+            .join("\n\n"),
+        })
       }
 
       if (command === "goal" && sessionID && hooks.goal) {

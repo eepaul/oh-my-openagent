@@ -1,7 +1,7 @@
 import type { CreatedHooks } from "../create-hooks"
 import { parseGoalCommand } from "../hooks/goal/command-arguments"
 import { log } from "../shared/logger"
-import { stopContinuation } from "./stop-continuation"
+import { formatBoulderArchiveNotice, stopContinuation } from "./stop-continuation"
 
 type CommandExecuteBeforeInput = {
   command: string
@@ -64,7 +64,14 @@ export function createCommandExecuteBeforeHandler(args: {
     const normalizedCommand = input.command.toLowerCase()
     const sessionID = input.sessionID
     if (normalizedCommand === "stop-continuation" && sessionID) {
-      stopContinuation({ directory, hooks, sessionID })
+      const result = stopContinuation({ directory, hooks, sessionID })
+      if (hasPartsOutput(output)) {
+        output.parts.push({
+          type: "text",
+          text: formatBoulderArchiveNotice(result),
+          synthetic: true,
+        })
+      }
     }
 
     if (hooks.goal && sessionID && normalizedCommand === "goal") {

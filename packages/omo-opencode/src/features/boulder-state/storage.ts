@@ -1,5 +1,6 @@
 export {
   addBoulderWork,
+  archiveBoulderState,
   appendSessionId,
   appendSessionIdForWork,
   clearBoulderState,

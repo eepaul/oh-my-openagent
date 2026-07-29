@@ -10,7 +10,7 @@ import { notifyWhenModelCacheIsMissing } from "./chat-message/model-cache-warnin
 import { recordSessionModel, getStoredMainSessionModel } from "./chat-message/session-model"
 import { runStartWorkHookIfApplicable } from "./chat-message/start-work-message"
 import { consumeNativeGoalCommandMarker } from "./command-execute-before"
-import { stopContinuation } from "./stop-continuation"
+import { formatBoulderArchiveNotice, stopContinuation } from "./stop-continuation"
 import type {
   ChatMessageHandlerOutput,
   ChatMessageHooks,
@@ -33,6 +33,10 @@ type PluginContextWithTui = {
       }) => Promise<unknown>
     }
   }
+}
+
+function hasPartsOutput(value: unknown): value is { parts: Array<{ type: string; text?: string; [key: string]: unknown }> } {
+  return typeof value === "object" && value !== null && "parts" in value && Array.isArray(value.parts)
 }
 
 function isRuntimeFallbackEnabled(
@@ -102,11 +106,18 @@ export function createChatMessageHandler(args: {
 
     const slashCommand = detectSlashCommand(extractPromptText(output.parts))
     if (slashCommand?.command === "stop-continuation") {
-      stopContinuation({
+      const result = stopContinuation({
         directory: ctx.directory,
         hooks,
         sessionID: input.sessionID,
       })
+      if (hasPartsOutput(output)) {
+        output.parts.push({
+          type: "text",
+          text: formatBoulderArchiveNotice(result),
+          synthetic: true,
+        })
+      }
     }
 
     const isFirstMessage = firstMessageVariantGate.shouldOverride(input.sessionID)
