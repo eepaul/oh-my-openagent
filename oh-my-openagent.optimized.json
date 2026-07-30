@@ -150,6 +150,22 @@
           "variant": "medium"
         }
       ]
+    },
+    "review-gpt-agent": {
+      "fallback_models": [
+        {
+          "model": "kimi-for-coding/k3",
+          "variant": "max"
+        }
+      ]
+    },
+    "review-claude-agent": {
+      "fallback_models": [
+        {
+          "model": "kimi-for-coding/k3",
+          "variant": "max"
+        }
+      ]
     }
   },
   "categories": {
