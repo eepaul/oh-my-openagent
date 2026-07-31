@@ -109,7 +109,8 @@
           "variant": "high"
         },
         {
-          "model": "kimi-for-coding/k3"
+          "model": "kimi-for-coding/k3",
+	  "variant": "max"
         }
       ]
     },
