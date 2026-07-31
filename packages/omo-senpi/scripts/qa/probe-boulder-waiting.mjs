@@ -9,6 +9,8 @@ import { createSandbox, digestDirectory, seedSandbox } from "./drive.mjs"
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const mockProviderEntry = join(scriptDir, "mock-provider", "index.ts")
+const localExtensionEntry = resolve(scriptDir, "..", "..", "plugin", "extensions", "omo.js")
+const localExtensionDriver = join(scriptDir, "probe-boulder-waiting-local-extension.mjs")
 const realSenpiAgentDir = join(homedir(), ".senpi", "agent")
 const CONTINUATION_TAG = "<omo-senpi-start-work-continuation>"
 
@@ -109,6 +111,20 @@ function runScenario(senpiBin, status) {
   }
 }
 
+async function runLocalExtensionScenario(status) {
+  const bun = findOnPath(process.env.BUN_BIN?.trim() || "bun")
+  if (bun === null) throw new Error("bun-runtime-unavailable")
+  const run = spawnSync(bun, [localExtensionDriver, status], {
+    cwd: scriptDir,
+    encoding: "utf8",
+    timeout: 60_000,
+  })
+  if (run.status !== 0) throw new Error(`${run.stderr}\n${run.stdout}`.trim())
+  const output = run.stdout.trim().split("\n").filter((line) => line.length > 0).at(-1)
+  if (output === undefined) throw new Error("local-extension-driver-produced-no-result")
+  return JSON.parse(output)
+}
+
 function readReceipt(path, expectedStatus) {
   if (!existsSync(path)) return false
   try {
@@ -128,53 +144,74 @@ function findOnPath(bin) {
   return null
 }
 
-function main() {
+async function main() {
   const beforeDigest = digestDirectory(realSenpiAgentDir)
   const senpiBin = process.env.SENPI_BIN?.trim() || "senpi"
   const resolvedSenpi = findOnPath(senpiBin)
-  if (resolvedSenpi === null) {
+  let runtimeMode = "senpi-cli"
+  let waiting
+  let active
+
+  try {
+    if (resolvedSenpi === null) {
+      runtimeMode = "in-process-local-extension"
+      waiting = await runLocalExtensionScenario("waiting_on_human")
+      active = await runLocalExtensionScenario("active")
+    } else {
+      waiting = runScenario(resolvedSenpi, "waiting_on_human")
+      active = runScenario(resolvedSenpi, "active")
+    }
+  } catch (error) {
     print({
-      result: "SKIP",
-      reason: "senpi-binary-unavailable",
-      waitingOnHumanNoContinuation: false,
-      activeContinuation: false,
+      result: "FAIL",
+      reason: "local-extension-load-or-drive-failed",
+      runtimeMode,
+      liveAssertions: { waiting_no_continuation: false, active_continuation: false },
       beforeDigest,
     })
+    process.exitCode = 1
     return
   }
 
-  const waiting = runScenario(resolvedSenpi, "waiting_on_human")
-  const active = runScenario(resolvedSenpi, "active")
   const waitingOnHumanNoContinuation =
-    waiting.exitCode === 0 && waiting.seededFromLiveSession && !waiting.continuationObserved
-  const activeContinuation = active.exitCode === 0 && active.seededFromLiveSession && active.continuationObserved
+    (runtimeMode === "senpi-cli" ? waiting.exitCode === 0 && waiting.seededFromLiveSession : waiting.inputObserved) &&
+    !waiting.continuationObserved
+  const activeContinuation =
+    (runtimeMode === "senpi-cli" ? active.exitCode === 0 && active.seededFromLiveSession : active.inputObserved) && active.continuationObserved
+  const result = waitingOnHumanNoContinuation && activeContinuation ? "PASS" : "FAIL"
   print({
-    result: waitingOnHumanNoContinuation && activeContinuation ? "PASS" : "FAIL",
-    waitingOnHumanNoContinuation,
-    activeContinuation,
+    result,
+    runtimeMode,
+    liveAssertions: {
+      waiting_no_continuation: waitingOnHumanNoContinuation,
+      active_continuation: activeContinuation,
+    },
     beforeDigest,
   })
+  if (result !== "PASS") process.exitCode = 1
 }
 
-function print({ result, reason, waitingOnHumanNoContinuation, activeContinuation, beforeDigest }) {
+function print({ result, reason, runtimeMode, liveAssertions, beforeDigest }) {
   const afterDigest = digestDirectory(realSenpiAgentDir)
   console.log(
     JSON.stringify({
       result,
       ...(reason ? { reason } : {}),
-      waitingOnHumanNoContinuation,
-      activeContinuation,
+      ...(runtimeMode ? { runtime_mode: runtimeMode } : {}),
+      ...(liveAssertions ? { live_assertions: liveAssertions } : {}),
       realSenpiUntouched: beforeDigest === afterDigest,
     }),
   )
 }
 
-function selfTest() {
+async function selfTest() {
   const scenario = createScenario("waiting_on_human")
   try {
     const seeder = readFileSync(join(scenario.sandbox.agentDir, "extensions", "boulder-state-seeder.js"), "utf8")
     if (!seeder.includes('const status = "waiting_on_human"')) throw new Error("waiting status was not seeded")
     if (!seeder.includes('session_ids: ["senpi:" + sessionId]')) throw new Error("live session id was not bound")
+    if (!existsSync(localExtensionEntry)) throw new Error("built local extension is missing")
+    if (!existsSync(localExtensionDriver)) throw new Error("local extension driver is missing")
   } finally {
     rmSync(scenario.sandbox.root, { recursive: true, force: true })
   }
@@ -182,8 +219,7 @@ function selfTest() {
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes("--self-test")) {
-    selfTest()
-    console.log("SELF-TEST OK")
+    selfTest().then(() => console.log("SELF-TEST OK"))
   } else {
     main()
   }
