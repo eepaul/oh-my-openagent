@@ -41,7 +41,7 @@ export function getElapsedMs(startedAt: string | undefined, endedAt: string | un
 }
 
 export function isValidWorkStatus(status: unknown): status is BoulderWorkStatus {
-  return status === "active" || status === "completed" || status === "paused" || status === "abandoned"
+  return status === "active" || status === "completed" || status === "paused" || status === "abandoned" || status === "waiting_on_human"
 }
 
 export function buildWorkFromMirror(state: BoulderState): BoulderWorkState {
@@ -61,6 +61,7 @@ export function buildWorkFromMirror(state: BoulderState): BoulderWorkState {
     agent: state.agent,
     worktree_path: state.worktree_path,
     task_sessions: state.task_sessions,
+    waiting: state.waiting,
   }
 }
 
@@ -77,6 +78,7 @@ export function projectWorkToMirror(state: BoulderState, work: BoulderWorkState)
   state.agent = work.agent
   state.worktree_path = work.worktree_path
   state.task_sessions = work.task_sessions ? { ...work.task_sessions } : {}
+  state.waiting = work.waiting
 }
 
 export function selectMirrorWork(state: BoulderState): BoulderWorkState | null {

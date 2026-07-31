@@ -192,6 +192,7 @@ export function getWorkResumeOptions(directory: string): BoulderWorkResumeOption
         session_count: work.session_ids.length,
         progress,
         is_current_mirror: state.active_work_id === work.work_id,
+        waiting: work.waiting,
       }
     })
 }

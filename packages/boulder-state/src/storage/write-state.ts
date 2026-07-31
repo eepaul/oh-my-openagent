@@ -37,6 +37,7 @@ export function writeBoulderState(directory: string, state: BoulderState): boole
             agent: stateToWrite.agent,
             worktree_path: stateToWrite.worktree_path,
             task_sessions: stateToWrite.task_sessions ? { ...stateToWrite.task_sessions } : {},
+            waiting: stateToWrite.waiting,
           },
         }
       }

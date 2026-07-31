@@ -14,11 +14,19 @@ export interface BoulderState {
   agent?: string
   worktree_path?: string
   task_sessions?: Record<string, TaskSessionState>
+  waiting?: BoulderWaitingMetadata
 }
 
 export type BoulderSessionOrigin = "direct" | "appended"
-export type BoulderWorkStatus = "active" | "completed" | "paused" | "abandoned"
+export type BoulderWorkStatus = "active" | "completed" | "paused" | "abandoned" | "waiting_on_human"
 export type BoulderTaskStatus = "running" | "completed" | "cancelled"
+
+export interface BoulderWaitingMetadata {
+  reason: string
+  since: string
+  source: "plan-blocked" | "question-tool"
+  question_call_id?: string
+}
 
 export interface BoulderWorkState {
   work_id: string
@@ -34,6 +42,7 @@ export interface BoulderWorkState {
   agent?: string
   worktree_path?: string
   task_sessions?: Record<string, TaskSessionState>
+  waiting?: BoulderWaitingMetadata
 }
 
 export interface PlanProgress {
@@ -77,6 +86,7 @@ export interface BoulderWorkResumeOption {
   session_count: number
   progress: PlanProgress
   is_current_mirror: boolean
+  waiting?: BoulderWaitingMetadata
 }
 
 export interface TopLevelTaskRef {
