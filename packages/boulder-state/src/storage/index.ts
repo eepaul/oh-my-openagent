@@ -13,4 +13,5 @@ export {
 } from "./read-state"
 export { appendSessionId, appendSessionIdForWork } from "./session"
 export { endTaskTimer, startTaskTimer, upsertTaskSessionState, upsertTaskSessionStateForWork } from "./task"
+export { enterWaitingOnHuman, resumeFromHuman } from "./waiting-state"
 export { addBoulderWork, clearBoulderState, completeBoulder, createBoulderState, generateWorkId, selectActiveWork, writeBoulderState } from "./write-state"

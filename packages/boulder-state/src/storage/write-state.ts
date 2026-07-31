@@ -185,6 +185,7 @@ export function completeBoulder(directory: string, workId?: string, endedAt?: st
   work.ended_at = endAt
   work.elapsed_ms = getElapsedMs(work.started_at, endAt)
   work.status = "completed"
+  delete work.waiting
   work.updated_at = nowIsoString()
 
   if (state.active_work_id === targetWorkId) {
