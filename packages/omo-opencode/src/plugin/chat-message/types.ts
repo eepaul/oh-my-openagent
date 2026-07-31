@@ -16,6 +16,7 @@ export type ChatMessageHandlerOutput = {
 
 export type ChatMessageInput = {
   readonly sessionID: string
+  readonly messageID?: string
   readonly agent?: string
   readonly model?: { readonly providerID: string; readonly modelID: string }
 }

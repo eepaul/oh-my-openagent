@@ -142,6 +142,21 @@ export async function recordHumanResumeAndClear(directory: string, workId: strin
   })
 }
 
+export async function recordHumanResumeAndClearAtEpoch(
+  directory: string,
+  workId: string,
+  expectedEpoch: number,
+): Promise<number | null> {
+  return await runWaitingWorkCriticalSection(directory, workId, async (_control, state) => {
+    if (state.resumeEpoch !== expectedEpoch) {
+      return null
+    }
+    state.resumeEpoch += 1
+    state.failClosed = undefined
+    return state.resumeEpoch
+  })
+}
+
 function matches(meta: WaitingFailClosedMeta | undefined, match: WaitingFailClosedMeta): boolean {
   return meta?.source === match.source && meta.question_call_id === match.question_call_id
 }
@@ -169,6 +184,26 @@ export async function recordHumanResumeAndClearIfMatch(
   match: Required<WaitingFailClosedMeta>,
 ): Promise<number | null> {
   return await runWaitingWorkCriticalSection(directory, workId, async (_control, state) => {
+    const persistedWaiting = persistedWaitingMeta(getWorkById(directory, workId))
+    if (!matches(persistedWaiting, match) && !matches(state.failClosed, match) && !matches(state.inFlight, match)) {
+      return null
+    }
+    state.resumeEpoch += 1
+    state.failClosed = undefined
+    return state.resumeEpoch
+  })
+}
+
+export async function recordHumanResumeAndClearIfMatchAtEpoch(
+  directory: string,
+  workId: string,
+  expectedEpoch: number,
+  match: Required<WaitingFailClosedMeta>,
+): Promise<number | null> {
+  return await runWaitingWorkCriticalSection(directory, workId, async (_control, state) => {
+    if (state.resumeEpoch !== expectedEpoch) {
+      return null
+    }
     const persistedWaiting = persistedWaitingMeta(getWorkById(directory, workId))
     if (!matches(persistedWaiting, match) && !matches(state.failClosed, match) && !matches(state.inFlight, match)) {
       return null

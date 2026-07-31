@@ -2,6 +2,9 @@ import type { OhMyOpenCodeConfig } from "../config"
 
 import { updateSessionAgent } from "../features/claude-code-session-state"
 import { detectSlashCommand, extractPromptText } from "../hooks/auto-slash-command/detector"
+import { compactionGraceTracker, type CompactionGraceTracker } from "../hooks/shared/compaction-grace-tracker"
+import { captureHumanMessageResume, scheduleHumanMessageResume } from "../hooks/shared/human-resume-controller"
+import { isResumableHumanInput } from "../hooks/shared/resumable-human-input"
 import { isSyntheticOrInternalOnlyTextParts, log } from "../shared"
 import { applyUltraworkModelOverrideOnMessage } from "./ultrawork-model-override"
 import type { PluginContext } from "./types"
@@ -35,6 +38,13 @@ type PluginContextWithTui = {
   }
 }
 
+type ChatMessageResumeArgs = {
+  readonly directory: string
+  readonly input: ChatMessageInput
+  readonly output: ChatMessageHandlerOutput
+  readonly tracker: CompactionGraceTracker
+}
+
 function hasPartsOutput(value: unknown): value is { parts: Array<{ type: string; text?: string; [key: string]: unknown }> } {
   return typeof value === "object" && value !== null && "parts" in value && Array.isArray(value.parts)
 }
@@ -50,6 +60,35 @@ function isRuntimeFallbackEnabled(
       ? pluginConfig.runtime_fallback
       : (pluginConfig.runtime_fallback?.enabled ?? false))
   )
+}
+
+function resolveChatMessageID(input: ChatMessageInput, output: ChatMessageHandlerOutput): string | undefined {
+  if (input.messageID !== undefined) {
+    return input.messageID
+  }
+  const messageID = output.message["id"]
+  return typeof messageID === "string" ? messageID : undefined
+}
+
+function scheduleChatMessageHumanResume(args: ChatMessageResumeArgs): void {
+  const messageID = resolveChatMessageID(args.input, args.output)
+  if (messageID === undefined) {
+    return
+  }
+  const message = { role: "user", parts: args.output.parts }
+  if (!isResumableHumanInput(message, {
+    compactionGraceActive: args.tracker.isCompactionGraceActive(args.input.sessionID),
+  })) {
+    return
+  }
+  const snapshot = captureHumanMessageResume({
+    directory: args.directory,
+    sessionID: args.input.sessionID,
+    messageID,
+  })
+  if (snapshot !== null) {
+    scheduleHumanMessageResume({ tracker: args.tracker, snapshot })
+  }
 }
 
 async function runChatMessageHooks(args: {
@@ -80,6 +119,7 @@ export function createChatMessageHandler(args: {
   pluginConfig: OhMyOpenCodeConfig
   firstMessageVariantGate: FirstMessageVariantGate
   hooks: ChatMessageHooks
+  compactionGraceTracker?: CompactionGraceTracker
 }): (
   input: ChatMessageInput,
   output: ChatMessageHandlerOutput
@@ -87,6 +127,7 @@ export function createChatMessageHandler(args: {
   const { ctx, pluginConfig, firstMessageVariantGate, hooks } = args
   const pluginContext = ctx as PluginContextWithTui
   const runtimeFallbackEnabled = isRuntimeFallbackEnabled(hooks, pluginConfig)
+  const humanInputTracker = args.compactionGraceTracker ?? compactionGraceTracker
 
   return async (
     input: ChatMessageInput,
@@ -119,6 +160,13 @@ export function createChatMessageHandler(args: {
         })
       }
     }
+
+    scheduleChatMessageHumanResume({
+      directory: ctx.directory,
+      input,
+      output,
+      tracker: humanInputTracker,
+    })
 
     const isFirstMessage = firstMessageVariantGate.shouldOverride(input.sessionID)
     if (isFirstMessage) {
