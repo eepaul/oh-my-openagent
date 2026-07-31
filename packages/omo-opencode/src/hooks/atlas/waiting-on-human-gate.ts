@@ -36,7 +36,6 @@ export async function notifyAtlasWaitingOnHuman(input: {
   readonly settleMs?: number
 }): Promise<void> {
   clearPendingRetryTimer(input.sessionState)
-  const work = getWorkById(input.ctx.directory, input.workId)
 
   await input.options?.waitingOnHumanNotifier?.maybeNotify({
     client: createWaitingOnHumanClient(input.ctx),

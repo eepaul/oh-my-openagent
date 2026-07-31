@@ -6,8 +6,15 @@ export declare const NOTEPAD_BASE_PATH: ".omo/notepads"
 export declare const PROMETHEUS_PLANS_DIR: ".omo/plans"
 
 export type BoulderSessionOrigin = "direct" | "appended"
-export type BoulderWorkStatus = "active" | "completed" | "paused" | "abandoned"
+export type BoulderWorkStatus = "active" | "completed" | "paused" | "abandoned" | "waiting_on_human"
 export type BoulderTaskStatus = "running" | "completed" | "cancelled"
+
+export interface BoulderWaitingMetadata {
+  reason: string
+  since: string
+  source: "plan-blocked" | "question-tool"
+  question_call_id?: string
+}
 
 export interface BoulderState {
   schema_version?: 2
@@ -25,6 +32,7 @@ export interface BoulderState {
   agent?: string
   worktree_path?: string
   task_sessions?: Record<string, TaskSessionState>
+  waiting?: BoulderWaitingMetadata
 }
 
 export interface BoulderWorkState {
@@ -41,6 +49,7 @@ export interface BoulderWorkState {
   agent?: string
   worktree_path?: string
   task_sessions?: Record<string, TaskSessionState>
+  waiting?: BoulderWaitingMetadata
 }
 
 export interface PlanProgress {
@@ -56,6 +65,8 @@ export interface PlanChecklist {
   blocked?: number
   nextTaskLabel: string | null
 }
+
+export type PlanWaitingShape = "waiting" | "runnable" | "unreadable"
 
 export interface TaskSessionState {
   task_key: string
@@ -84,6 +95,7 @@ export interface BoulderWorkResumeOption {
   session_count: number
   progress: PlanProgress
   is_current_mirror: boolean
+  waiting?: BoulderWaitingMetadata
 }
 
 export interface TopLevelTaskRef {
@@ -131,6 +143,10 @@ export declare function appendSessionIdForWork(
 ): BoulderState | null
 export declare function archiveBoulderState(directory: string, now?: () => Date): string | null
 export declare function clearBoulderState(directory: string): boolean
+export declare function checkPlanWaiting(
+  directory: string,
+  work: BoulderWorkState,
+): { waiting: boolean; stale: "runnable" | "complete" | null }
 export declare function completeBoulder(directory: string, workId?: string, endedAt?: string): BoulderState | null
 export declare function createBoulderState(
   planPath: string,
@@ -144,6 +160,15 @@ export declare function endTaskTimer(
   taskKey: string,
   endedAt?: string,
 ): BoulderState | null
+export declare function enterWaitingOnHuman(
+  directory: string,
+  workId: string,
+  meta: {
+    readonly reason: string
+    readonly source: BoulderWaitingMetadata["source"]
+    readonly question_call_id?: string
+  },
+): boolean
 export declare function findPrometheusPlans(directory: string): string[]
 export declare function generateWorkId(planName: string): string
 export declare function getActiveWorks(directory: string): BoulderWorkState[]
@@ -164,6 +189,8 @@ export declare function isPlanLifecycleComplete(planPath: string): boolean
 export declare function isPlanWaitingOnHuman(planPath: string): boolean
 export declare function normalizeSessionId(sessionId: string, platform?: "codex" | "opencode" | "senpi"): string
 export declare function readBoulderState(directory: string): BoulderState | null
+export declare function readPlanWaitingShape(planPath: string): PlanWaitingShape
+export declare function resumeFromHuman(directory: string, workId: string): boolean
 export declare function resolveBoulderPlanPath(
   directory: string,
   state: Pick<BoulderState, "active_plan" | "worktree_path">,
