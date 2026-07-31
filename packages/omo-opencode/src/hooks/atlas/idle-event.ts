@@ -1,11 +1,11 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import {
   getWorkForSession,
   normalizeSessionId,
   resolveBoulderPlanPath,
 } from "../../features/boulder-state"
 import { log } from "../../shared/logger"
+import { checkWorkWaiting } from "../shared/check-work-waiting"
 import { shouldPromptAfterSessionIdle } from "../shared/session-idle-settle"
 import { isAwaitingFinalWaveApproval } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
@@ -51,12 +51,14 @@ export async function handleAtlasSessionIdle(input: {
 
   const { boulderState, progress, appendedSession } = activeBoulderSession
   const activePlanPath = resolveBoulderPlanPath(ctx.directory, boulderState)
+  const waitingWorkId = boulderState.active_work_id
+    ?? getWorkForSession(ctx.directory, sessionID)?.work_id
   if (options?.isContinuationStopped?.(sessionID)) {
     log(`[${HOOK_NAME}] Skipped: continuation stopped for session`, { sessionID })
     return
   }
 
-  if (isPlanWaitingOnHuman(activePlanPath)) {
+  if (waitingWorkId && await checkWorkWaiting(ctx.directory, waitingWorkId)) {
     await notifyAtlasWaitingOnHuman({
       ctx,
       sessionID,
@@ -64,6 +66,7 @@ export async function handleAtlasSessionIdle(input: {
       options,
       planPath: activePlanPath,
       planName: boulderState.plan_name,
+      workId: waitingWorkId,
       settleMs: options?.idleSettleMs,
     })
     return

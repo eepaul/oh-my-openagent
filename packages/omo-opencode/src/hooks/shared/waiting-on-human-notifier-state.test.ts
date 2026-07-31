@@ -13,6 +13,8 @@ const notification = {
   client,
   directory: "/workspace",
   sessionID: "ses_waiting",
+  workId: "work_waiting",
+  waitingSince: "2026-07-31T00:00:00.000Z",
   planPath: "/workspace/.omo/plans/plan.md",
   planName: "plan",
   blockedCount: 2,
@@ -87,7 +89,7 @@ describe("createWaitingOnHumanNotifier reservation state", () => {
     })
   }
 
-  test("#given a consumed waiting episode #when its blocked snapshot changes or its session resets #then a new notification is allowed", async () => {
+  test("#given a consumed waiting episode #when its reason snapshot changes then a new episode begins #then only the new since value or reset permits notification", async () => {
     // given
     let dispatches = 0
     const dispatch: typeof dispatchInternalPrompt = async () => {
@@ -99,10 +101,29 @@ describe("createWaitingOnHumanNotifier reservation state", () => {
     // when
     await notifier.maybeNotify(notification)
     await notifier.maybeNotify({ ...notification, blockedCount: 3 })
+    await notifier.maybeNotify({ ...notification, waitingSince: "2026-07-31T00:01:00.000Z" })
     notifier.reset(notification.sessionID)
     await notifier.maybeNotify(notification)
 
     // then
     expect(dispatches).toBe(3)
+  })
+
+  test("#given temporary fail-closed notification #when the same work later persists its since timestamp #then it does not notify twice", async () => {
+    // given
+    let dispatches = 0
+    const notifier = createWaitingOnHumanNotifier({
+      dispatchInternalPrompt: async () => {
+        dispatches += 1
+        return { status: "dispatched", response: undefined }
+      },
+    })
+
+    // when
+    await notifier.maybeNotify({ ...notification, waitingSince: undefined })
+    await notifier.maybeNotify(notification)
+
+    // then
+    expect(dispatches).toBe(1)
   })
 })

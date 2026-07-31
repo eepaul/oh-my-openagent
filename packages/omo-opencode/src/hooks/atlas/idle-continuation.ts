@@ -1,14 +1,17 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
+import { checkPlanWaiting } from "@oh-my-opencode/boulder-state"
 import {
   getPlanProgress,
   getTaskSessionState,
+  getWorkForSession,
   normalizeSessionId,
   readBoulderState,
   readCurrentTopLevelTask,
   resolveBoulderPlanPath,
 } from "../../features/boulder-state"
 import { log } from "../../shared/logger"
+import { checkWorkWaiting } from "../shared/check-work-waiting"
+import { isFailClosed } from "../shared/waiting-fail-closed-gate"
 import { injectBoulderContinuation } from "./boulder-continuation-injector"
 import { HOOK_NAME } from "./hook-name"
 import {
@@ -79,6 +82,8 @@ export async function injectContinuation(input: {
     if (!currentBoulder) {
       return
     }
+    const waitingWorkId = currentBoulder.active_work_id
+      ?? getWorkForSession(input.ctx.directory, input.sessionID)?.work_id
 
     if (input.options?.isContinuationStopped?.(input.sessionID)) {
       clearPendingRetryTimer(input.sessionState)
@@ -86,7 +91,7 @@ export async function injectContinuation(input: {
       return
     }
 
-    if (currentPlanPath && isPlanWaitingOnHuman(currentPlanPath)) {
+    if (currentPlanPath && waitingWorkId && await checkWorkWaiting(input.ctx.directory, waitingWorkId)) {
       await notifyAtlasWaitingOnHuman({
         ctx: input.ctx,
         sessionID: input.sessionID,
@@ -94,6 +99,7 @@ export async function injectContinuation(input: {
         options: input.options,
         planPath: currentPlanPath,
         planName: currentBoulder.plan_name,
+        workId: waitingWorkId,
         settleMs: input.idleSettleMs,
       })
       return
@@ -128,10 +134,18 @@ export async function injectContinuation(input: {
       backgroundManager: input.options?.backgroundManager,
       sessionState: input.sessionState,
       idleSettleMs: input.idleSettleMs,
-      preDispatchGuard: () =>
-        !input.options?.isContinuationStopped?.(input.sessionID)
-        && currentPlanPath !== null
-        && !isPlanWaitingOnHuman(currentPlanPath),
+      preDispatchGuard: () => {
+        const freshBoulder = readBoulderState(input.ctx.directory)
+        const freshWorkId = freshBoulder?.active_work_id
+          ?? getWorkForSession(input.ctx.directory, input.sessionID)?.work_id
+        const freshWork = freshWorkId === undefined
+          ? null
+          : getWorkForSession(input.ctx.directory, input.sessionID)
+        return !input.options?.isContinuationStopped?.(input.sessionID)
+          && freshWork !== null
+          && !isFailClosed(input.ctx.directory, freshWork.work_id)
+          && !checkPlanWaiting(input.ctx.directory, freshWork).waiting
+      },
     })
 
     if (result === "injected") {
@@ -220,8 +234,10 @@ export function scheduleRetry(input: {
       if (!currentBoulder.session_ids?.includes(normalizedSessionID)) return
 
       const currentPlanPath = resolveBoulderPlanPath(ctx.directory, currentBoulder)
+      const waitingWorkId = currentBoulder.active_work_id
+        ?? getWorkForSession(ctx.directory, sessionID)?.work_id
       if (options?.isContinuationStopped?.(sessionID)) return
-      if (isPlanWaitingOnHuman(currentPlanPath)) {
+      if (waitingWorkId && await checkWorkWaiting(ctx.directory, waitingWorkId)) {
         await notifyAtlasWaitingOnHuman({
           ctx,
           sessionID,
@@ -229,6 +245,7 @@ export function scheduleRetry(input: {
           options,
           planPath: currentPlanPath,
           planName: currentBoulder.plan_name,
+          workId: waitingWorkId,
         })
         return
       }

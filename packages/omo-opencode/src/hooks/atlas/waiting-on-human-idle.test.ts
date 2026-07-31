@@ -33,7 +33,7 @@ describe("handleAtlasSessionIdle waiting on human", () => {
     releaseAllPromptAsyncReservationsForTesting()
   })
 
-  test("#given every plan task is blocked #when atlas idles #then it notifies without completing or forcing continuation", async () => {
+  test("#given every plan task is blocked #when atlas idles #then it persists waiting without completing or forcing continuation", async () => {
     // given
     const planPath = join(directory, "plan.md")
     writeFileSync(planPath, "## TODOs\n- [~] 1. Await approval\n- [~] 2. Await credentials\n")
@@ -54,7 +54,8 @@ describe("handleAtlasSessionIdle waiting on human", () => {
     expect(notifications).toHaveLength(1)
     expect(notifications[0]?.blockedCount).toBe(2)
     expect(promptAsync).not.toHaveBeenCalled()
-    expect(readBoulderState(directory)?.status).toBe("active")
+    expect(readBoulderState(directory)?.status).toBe("waiting_on_human")
+    expect(readBoulderState(directory)?.waiting?.source).toBe("plan-blocked")
   })
 
   test("#given twenty-six complete tasks and one blocked task #when atlas idles #then it takes the waiting branch before completion", async () => {
@@ -82,7 +83,7 @@ describe("handleAtlasSessionIdle waiting on human", () => {
     expect(notifications).toHaveLength(1)
     expect(notifications[0]?.blockedCount).toBe(1)
     expect(promptAsync).not.toHaveBeenCalled()
-    expect(readBoulderState(directory)?.status).toBe("active")
+    expect(readBoulderState(directory)?.status).toBe("waiting_on_human")
   })
 
   test("#given a stopped session with only blocked work #when atlas idles #then it sends neither reminder nor continuation", async () => {

@@ -31,6 +31,8 @@ export type WaitingOnHumanNotificationInput = {
   readonly client: WaitingOnHumanPromptDispatchArgs["client"]
   readonly directory: string
   readonly sessionID: string
+  readonly workId?: string
+  readonly waitingSince?: string
   readonly planPath: string
   readonly planName: string
   readonly blockedCount: number
@@ -46,8 +48,11 @@ type WaitingOnHumanNotifierDependencies = {
 
 const WAITING_ON_HUMAN_SOURCE = "waiting-on-human-notifier"
 
-function createWaitingEpisodeKey(planPath: string, blockedCount: number): string {
-  return JSON.stringify([planPath, blockedCount])
+function createWaitingEpisodeKey(input: WaitingOnHumanNotificationInput): string {
+  if (input.workId !== undefined) {
+    return JSON.stringify([input.workId, input.waitingSince ?? `temporary:${input.workId}`])
+  }
+  return JSON.stringify([input.planPath, input.blockedCount])
 }
 
 function shouldKeepWaitingEpisodeReservation(result: InternalPromptDispatchResult): boolean {
@@ -73,6 +78,7 @@ export function createWaitingOnHumanNotifier(
   dependencies: WaitingOnHumanNotifierDependencies = {},
 ): WaitingOnHumanNotifier {
   const reservedEpisodesBySession = new Map<string, Set<string>>()
+  const temporaryEpisodesBySession = new Map<string, Map<string, string>>()
   const promptDispatcher = dependencies.dispatchInternalPrompt ?? dispatchInternalPrompt
 
   function reserve(sessionID: string, episodeKey: string): boolean {
@@ -99,9 +105,30 @@ export function createWaitingOnHumanNotifier(
     }
   }
 
+  function resolveEpisodeKey(input: WaitingOnHumanNotificationInput): string {
+    if (input.workId === undefined) {
+      return createWaitingEpisodeKey(input)
+    }
+    const temporaryEpisodes = temporaryEpisodesBySession.get(input.sessionID)
+    const temporaryKey = temporaryEpisodes?.get(input.workId)
+    if (input.waitingSince !== undefined && temporaryKey !== undefined) {
+      if (reservedEpisodesBySession.get(input.sessionID)?.has(temporaryKey) === true) {
+        return temporaryKey
+      }
+      temporaryEpisodes?.delete(input.workId)
+    }
+    const episodeKey = createWaitingEpisodeKey(input)
+    if (input.waitingSince === undefined) {
+      const nextTemporaryEpisodes = temporaryEpisodes ?? new Map<string, string>()
+      nextTemporaryEpisodes.set(input.workId, episodeKey)
+      temporaryEpisodesBySession.set(input.sessionID, nextTemporaryEpisodes)
+    }
+    return episodeKey
+  }
+
   return {
     maybeNotify: async (input) => {
-      const episodeKey = createWaitingEpisodeKey(input.planPath, input.blockedCount)
+      const episodeKey = resolveEpisodeKey(input)
       if (!reserve(input.sessionID, episodeKey)) {
         return null
       }
@@ -130,6 +157,7 @@ export function createWaitingOnHumanNotifier(
     },
     reset: (sessionID) => {
       reservedEpisodesBySession.delete(sessionID)
+      temporaryEpisodesBySession.delete(sessionID)
     },
   }
 }
