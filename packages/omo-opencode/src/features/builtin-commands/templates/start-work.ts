@@ -17,9 +17,11 @@ export const START_WORK_TEMPLATE = `You are starting an Atlas work session.
 
 2. **Check for active boulder state**: Read \`.omo/boulder.json\` if it exists
 
+   - \`waiting_on_human\` is a persisted Boulder work status meaning automatic continuation is intentionally paused until real human input or explicit \`/start-work\` resume
+
 3. **Decision logic**:
    - If multiple active works are listed in your context:
-     - This means boulder.json has more than one work with status: \`active\` or \`paused\`
+     - This means boulder.json has more than one work with status: \`active\`, \`paused\`, or \`waiting_on_human\`
      - Use the Question tool to ask the user which plan to resume
      - Resume by running \`/start-work {plan-name}\` for the selected plan
      - If the user says "start a new plan", continue with cold-start auto-selection logic

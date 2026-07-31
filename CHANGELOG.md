@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `waiting_on_human` is a persisted Boulder work status meaning automatic continuation is intentionally paused until real human input or explicit `/start-work` resume.
+  - `waiting_on_human` requires this version or later.
+  - Older omo-opencode versions treat this unknown status as active when reading a new `boulder.json` and may continue looping. This is a known compatibility window; no shim is added because the package publishes as one unit.
+  - Older Codex and Senpi adapters fail closed safely when they encounter the unknown status.
 - CodeGraph upgraded to 1.4.1; project stores built by older versions migrate automatically on first use. (PR #6242)
 - Opt-in CodeGraph shared daemon across all three adapters: `codegraph.daemon` config key (default false) on OpenCode and Codex, `OMO_CODEGRAPH_DAEMON=1` on Senpi, plus `codegraph.excluded_roots` parity. (PR #6251)
 - Process hygiene: parent-liveness watchdogs exit MCP server processes when their parent dies, new lsp daemons reap older-version daemons at startup, and a startup family sweep removes orphaned codegraph and lsp processes on every adapter. (PR #6262)
