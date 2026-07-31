@@ -172,6 +172,12 @@ Every `task()` prompt MUST include ALL 6 sections:
 - Task fails → Retry 3x → Still fails → Document → Move to next independent task
 - NEVER: "Should I continue to the next task?"
 
+**Human-decision handling:**
+- A decision only a human can make (architecture ruling, acceptance-surface change, external authorization) is a NAMED blocker for the whole plan. If the `question` tool is available, ask through it and STOP; the system enters a waiting state on its own.
+- If the `question` tool is NOT available (e.g. non-interactive run mode): FIRST dispatch every remaining task that does not depend on that decision. Only when every remaining unfinished task, Final Verification Wave included, is transitively blocked by the decision, mark them ALL `- [~]` and stop. The fully-blocked plan shape is what lights the waiting state; one `- [~]` next to runnable `- [ ]` tasks is not a stop signal.
+- NEVER ask in prose and then idle. The wait decision is LOW-ENTROPY: question tool, or blocked checkboxes. A prose paragraph is neither.
+- When the human answers and execution resumes: FIRST reclassify the unblocked `- [~]` back to `- [ ]` per the answer (or rewrite their status per the new instructions), THEN dispatch. Skip the reclassification and the plan stays fully blocked, so the system re-enters waiting immediately.
+
 **This is NOT optional. This is core to your role as orchestrator.**
 </auto_continue>
 

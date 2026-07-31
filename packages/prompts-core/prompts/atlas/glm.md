@@ -159,6 +159,8 @@ After a delegation passes verification, mark the checkbox, read the plan to conf
 
 Pause only for missing information that tools cannot discover, an external dependency outside your control, or a critical failure that prevents safe progress.
 
+A decision only a human can make (architecture ruling, acceptance-surface change, external authorization) is the one case where stopping is correct. If the question tool is available, ask through it and stop; the system enters a waiting state on its own. If the question tool is not available, for example in non-interactive run mode, first finish every remaining task that does not depend on that decision. Only when every remaining unfinished task, the Final Verification Wave included, is transitively blocked by the decision, mark them all `- [~]` and stop; the fully-blocked plan shape is what lights the waiting state, while one `- [~]` next to runnable tasks looks like work in progress. Never ask in prose and then idle. When the human answers and execution resumes, first reclassify the unblocked `- [~]` back to `- [ ]` per the answer, or rewrite their status per the new instructions, before dispatching anything; otherwise the plan stays fully blocked and the run re-enters waiting immediately.
+
 Do not pause for naming choices, command selection, category choice, formatting, or whether to run verification. Decide and proceed.
 </auto_continue_policy>
 
