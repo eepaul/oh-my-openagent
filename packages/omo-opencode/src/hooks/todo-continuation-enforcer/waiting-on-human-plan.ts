@@ -5,11 +5,7 @@ import {
   getPlanChecklist,
   resumeFromHuman,
 } from "@oh-my-opencode/boulder-state"
-import {
-  messageHasQuestionTool,
-  messageIsSyntheticOrInternalUser,
-  messageRole,
-} from "@oh-my-opencode/utils/prompt-async-gate/prompt-message-state"
+import { latestAssistantTurnPendingQuestionTool } from "@oh-my-opencode/utils"
 
 import {
   getWorkById,
@@ -17,7 +13,6 @@ import {
   resolveBoulderPlanPathForWork,
 } from "../../features/boulder-state"
 import { normalizeSDKResponse } from "../../shared"
-import { isRecord } from "@oh-my-opencode/utils"
 import { checkWorkWaiting } from "../shared/check-work-waiting"
 import {
   isFailClosed,
@@ -87,36 +82,6 @@ export async function getWaitingOnHumanPlanForSession(
   })
 }
 
-function findPendingQuestionCallID(messages: readonly unknown[]): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    switch (messageRole(message)) {
-      case "user":
-        if (messageIsSyntheticOrInternalUser(message)) {
-          continue
-        }
-        return undefined
-      case "assistant": {
-        if (!messageHasQuestionTool(message) || !isRecord(message) || !Array.isArray(message.parts)) {
-          return undefined
-        }
-        for (const part of message.parts) {
-          if (!messageHasQuestionTool({ parts: [part] }) || !isRecord(part)) {
-            continue
-          }
-          if (typeof part.callID === "string" && part.callID.length > 0) {
-            return part.callID
-          }
-        }
-        return undefined
-      }
-      default:
-        continue
-    }
-  }
-  return undefined
-}
-
 async function findPendingQuestionCallIDForSession(
   ctx: PluginInput,
   sessionID: string,
@@ -125,7 +90,7 @@ async function findPendingQuestionCallIDForSession(
     path: { id: sessionID },
     query: { directory: ctx.directory },
   })
-  return findPendingQuestionCallID(normalizeSDKResponse<unknown[]>(response, []))
+  return latestAssistantTurnPendingQuestionTool(normalizeSDKResponse<unknown[]>(response, []))?.callID
 }
 
 async function isQuestionStillPending(input: {
@@ -143,7 +108,7 @@ export async function promotePendingQuestionWaiting(input: {
   readonly expectedEpoch: number
   readonly messages: readonly unknown[]
 }): Promise<boolean> {
-  const questionCallID = findPendingQuestionCallID(input.messages)
+  const questionCallID = latestAssistantTurnPendingQuestionTool([...input.messages])?.callID
   if (questionCallID === undefined) {
     return true
   }

@@ -24,6 +24,7 @@ const pendingQuestionMessages: SessionMessagesResponse = {
     parts: [{
       type: "tool",
       tool: "question",
+      id: "part-id-is-not-call-id",
       callID: QUESTION_CALL_ID,
       state: { status: "pending" },
     }],

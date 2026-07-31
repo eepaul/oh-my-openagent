@@ -6,12 +6,14 @@ describe("latestAssistantTurnPendingQuestionTool", () => {
   for (const status of [undefined, "pending", "running", "in_progress"] as const) {
     test(`#given a ${status ?? "missing"} question status #when detecting the latest assistant turn #then it returns the stable call ID`, () => {
       // given
+      const partID = "part-id-is-not-call-id"
+      const callID = "call-stable-question"
       const messages = [{
         info: { role: "assistant" },
         parts: [{
           type: "tool",
-          id: "part-id-is-not-call-id",
-          callID: "call-stable-question",
+          id: partID,
+          callID,
           tool: "question",
           ...(status === undefined ? {} : { state: { status } }),
         }],
@@ -21,7 +23,8 @@ describe("latestAssistantTurnPendingQuestionTool", () => {
       const detected = latestAssistantTurnPendingQuestionTool(messages)
 
       // then
-      expect(detected?.callID).toBe("call-stable-question")
+      expect(detected?.callID).toBe(callID)
+      expect(partID).not.toBe(callID)
     })
   }
 
