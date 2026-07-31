@@ -1,4 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin"
+import { resolveBoulderPlanPathForWork } from "@oh-my-opencode/boulder-state"
+import { pendingQuestionToolCall } from "@oh-my-opencode/utils"
 import { getWorkForSession } from "../../features/boulder-state"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
 import type { InternalInitiatorTextPartLike } from "../../shared/internal-initiator-marker"
@@ -12,7 +14,9 @@ import { clearFinalWaveGate } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { isAbortError } from "./is-abort-error"
 import { handleAtlasSessionIdle } from "./idle-event"
+import { maybePromoteAtlasQuestionToolWaiting } from "./question-tool-waiting"
 import type { AtlasHookOptions, SessionState } from "./types"
+import { notifyAtlasWaitingOnHuman } from "./waiting-on-human-gate"
 
 function isEventPart(value: unknown): value is InternalInitiatorTextPartLike {
   if (!isRecord(value)) {
@@ -153,6 +157,7 @@ export function createAtlasEventHandler(input: {
       const role = typeof info?.["role"] === "string" ? info["role"] : undefined
       const questionCallID = resolveQuestionToolCompletion(props)
       const part = props?.["part"]
+      const pendingQuestion = pendingQuestionToolCall(part)
       const partMessageID = isRecord(part) && typeof part["messageID"] === "string"
         ? part["messageID"]
         : undefined
@@ -178,6 +183,26 @@ export function createAtlasEventHandler(input: {
           sessionID,
           questionCallID,
         })
+      }
+
+      if (sessionID !== undefined && pendingQuestion !== null) {
+        const work = getWorkForSession(ctx.directory, sessionID)
+        if (work !== null && await maybePromoteAtlasQuestionToolWaiting({
+          ctx,
+          sessionID,
+          workId: work.work_id,
+        })) {
+          await notifyAtlasWaitingOnHuman({
+            ctx,
+            sessionID,
+            sessionState: getState(sessionID),
+            options,
+            planPath: resolveBoulderPlanPathForWork(ctx.directory, work),
+            planName: work.plan_name,
+            workId: work.work_id,
+            settleMs: options?.idleSettleMs,
+          })
+        }
       }
 
       if (sessionID && role === "assistant") {

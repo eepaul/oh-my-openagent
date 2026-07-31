@@ -71,7 +71,10 @@ export {
   latestAssistantTurnHasUnansweredQuestion,
   latestAssistantTurnPendingQuestionTool,
 } from "./prompt-async-gate/pending-tool-turn"
-export type { PendingQuestionTool } from "./prompt-async-gate/prompt-message-state"
+export {
+  pendingQuestionToolCall,
+  type PendingQuestionTool,
+} from "./prompt-async-gate/prompt-message-state"
 
 type ObjectPathPromptInput = {
   readonly path?: { readonly id?: string } | string

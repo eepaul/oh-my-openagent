@@ -157,7 +157,7 @@ function partIsUnansweredQuestionTool(part: unknown): boolean {
   return state.status !== "completed"
 }
 
-function pendingQuestionToolCall(part: unknown): PendingQuestionTool | null {
+export function pendingQuestionToolCall(part: unknown): PendingQuestionTool | null {
   if (!partIsQuestionTool(part) || !isRecord(part)) {
     return null
   }
