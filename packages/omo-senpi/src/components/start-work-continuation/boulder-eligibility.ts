@@ -21,8 +21,17 @@ export function findContinuableBoulderWork(
     return null
   }
 
-  if (work.status !== "active" && work.status !== "paused") {
-    return null
+  switch (work.status) {
+    case "active":
+    case "paused":
+      break
+    case "completed":
+    case "abandoned":
+    case "waiting_on_human":
+    case undefined:
+      return null
+    default:
+      return null
   }
 
   const planPath = resolveBoulderPlanPathForWork(cwd, work)
@@ -33,4 +42,3 @@ export function findContinuableBoulderWork(
 
   return { work, planPath, checklist }
 }
-
