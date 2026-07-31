@@ -3,6 +3,7 @@ export { archiveBoulderState } from "./storage/archive-state"
 export { getPlanChecklist, parsePlanChecklist } from "./plan-checklist"
 export { readCurrentTopLevelTask } from "./top-level-task"
 export { isPlanLifecycleComplete, isPlanWaitingOnHuman } from "./waiting-on-human"
+export { checkPlanWaiting, readPlanWaitingShape } from "./waiting-work"
 export {
   addBoulderWork,
   appendSessionId,
