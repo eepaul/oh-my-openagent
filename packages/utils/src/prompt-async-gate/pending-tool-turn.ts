@@ -10,7 +10,9 @@ import {
   messageHasInternalInitiatorMarker,
   messageIsSyntheticOrInternalUser,
   messageIsTerminalNoReplyUser,
+  messagePendingQuestionTool,
   messageRole,
+  type PendingQuestionTool,
 } from "./prompt-message-state"
 import { isRecord } from "../record-type-guard"
 import { isPromptMessageInspectionAborted } from "./message-inspection-error"
@@ -46,20 +48,31 @@ function getMessagesData(response: unknown): unknown[] {
 }
 
 export function latestAssistantTurnHasUnansweredQuestion(messages: unknown[]): boolean {
+  return latestAssistantTurnQuestion(messages, (message) => messageHasQuestionTool(message) ? true : null) !== null
+}
+
+export function latestAssistantTurnPendingQuestionTool(messages: unknown[]): PendingQuestionTool | null {
+  return latestAssistantTurnQuestion(messages, messagePendingQuestionTool)
+}
+
+function latestAssistantTurnQuestion<TResult>(
+  messages: unknown[],
+  inspectAssistant: (message: unknown) => TResult | null,
+): TResult | null {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index]
     const role = messageRole(message)
     if (role === "assistant") {
-      return messageHasQuestionTool(message)
+      return inspectAssistant(message)
     }
     if (role === "user") {
       if (messageIsSyntheticOrInternalUser(message)) {
         continue
       }
-      return false
+      return null
     }
   }
-  return false
+  return null
 }
 
 export function latestAssistantTurnBlocksInternalPrompt(messages: unknown[]): boolean {
@@ -140,10 +153,13 @@ export async function sessionLatestAssistantBlocksInternalPrompt<TInput>(args: {
     )
     return latestAssistantTurnBlocksInternalPrompt(getMessagesData(response))
   } catch (error) {
+    const loggedError = error instanceof Error
+      ? { name: error.name, message: error.message }
+      : String(error)
     log("[prompt-async-gate] latest assistant prompt-block check failed", {
       sessionID: args.sessionID,
       source: args.source,
-      error: String(error),
+      error: loggedError,
     })
     return !isPromptMessageInspectionAborted(error)
   }

@@ -1,3 +1,4 @@
+import { QUESTION_TOOL_NAMES } from "@oh-my-opencode/utils"
 import { isSyntheticOrInternalUserMessage } from "../../shared/internal-initiator-marker"
 import { log } from "../../shared/logger"
 import { HOOK_NAME } from "./constants"
@@ -17,8 +18,6 @@ interface Message {
   role?: string
   parts?: MessagePart[]
 }
-
-const QUESTION_TOOL_NAMES = new Set(["question", "ask_user_question", "askuserquestion"])
 
 function getToolName(part: MessagePart): string | undefined {
   return part.name ?? part.tool ?? part.toolName

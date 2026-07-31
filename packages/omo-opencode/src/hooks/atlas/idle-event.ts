@@ -11,6 +11,7 @@ import { isAwaitingFinalWaveApproval } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { handleCompletedBoulderIdle } from "./idle-completion-nudge"
 import { hasRunningBackgroundTasks, injectContinuation, scheduleRetry } from "./idle-continuation"
+import { maybePromoteAtlasQuestionToolWaiting } from "./question-tool-waiting"
 import {
   CONTINUATION_COOLDOWN_MS,
   FAILURE_BACKOFF_MS,
@@ -72,6 +73,20 @@ export async function handleAtlasSessionIdle(input: {
     return
   }
   options?.waitingOnHumanNotifier?.reset(sessionID)
+
+  if (waitingWorkId && await maybePromoteAtlasQuestionToolWaiting({ ctx, sessionID, workId: waitingWorkId })) {
+    await notifyAtlasWaitingOnHuman({
+      ctx,
+      sessionID,
+      sessionState,
+      options,
+      planPath: activePlanPath,
+      planName: boulderState.plan_name,
+      workId: waitingWorkId,
+      settleMs: options?.idleSettleMs,
+    })
+    return
+  }
 
   if (progress.isComplete) {
     await handleCompletedBoulderIdle({ ctx, options, sessionID, sessionState, boulderState })

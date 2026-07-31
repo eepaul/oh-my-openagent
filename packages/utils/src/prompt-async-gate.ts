@@ -66,6 +66,13 @@ export type {
   PromptAsyncGateResult,
 } from "./prompt-async-gate/types"
 
+export { QUESTION_TOOL_NAMES } from "./prompt-async-gate/question-tool-names"
+export {
+  latestAssistantTurnHasUnansweredQuestion,
+  latestAssistantTurnPendingQuestionTool,
+} from "./prompt-async-gate/pending-tool-turn"
+export type { PendingQuestionTool } from "./prompt-async-gate/prompt-message-state"
+
 type ObjectPathPromptInput = {
   readonly path?: { readonly id?: string } | string
   readonly [key: string]: unknown

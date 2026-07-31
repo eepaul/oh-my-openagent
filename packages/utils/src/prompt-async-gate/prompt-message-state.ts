@@ -6,6 +6,7 @@ import {
   type InternalInitiatorTextPartLike,
 } from "../internal-initiator-marker"
 import { isRecord } from "../record-type-guard"
+import { QUESTION_TOOL_NAMES, questionToolStatusDisposition } from "./question-tool-names"
 
 export function messageRole(message: unknown): string | undefined {
   if (!isRecord(message)) {
@@ -118,8 +119,6 @@ export function messageHasInternalInitiatorMarker(message: unknown): boolean {
   )
 }
 
-const QUESTION_TOOL_NAMES = new Set(["question", "ask_user_question", "askuserquestion"])
-
 function partToolName(part: Record<string, unknown>): string | undefined {
   if (typeof part.name === "string") {
     return part.name
@@ -156,6 +155,21 @@ function partIsUnansweredQuestionTool(part: unknown): boolean {
     return true
   }
   return state.status !== "completed"
+}
+
+function pendingQuestionToolCall(part: unknown): PendingQuestionTool | null {
+  if (!partIsQuestionTool(part) || !isRecord(part)) {
+    return null
+  }
+  const state = part.state
+  const status = isRecord(state) ? state.status : undefined
+  if (questionToolStatusDisposition(status) !== "pending") {
+    return null
+  }
+  if (typeof part.callID !== "string" || part.callID.length === 0) {
+    return null
+  }
+  return { callID: part.callID }
 }
 
 function partIsWaitingOnTool(part: unknown): boolean {
@@ -199,6 +213,23 @@ function partHasSubstantiveAssistantOutput(part: unknown): boolean {
 
 export function messageHasQuestionTool(message: unknown): boolean {
   return isRecord(message) && Array.isArray(message.parts) && message.parts.some(partIsUnansweredQuestionTool)
+}
+
+export type PendingQuestionTool = {
+  readonly callID: string
+}
+
+export function messagePendingQuestionTool(message: unknown): PendingQuestionTool | null {
+  if (!isRecord(message) || !Array.isArray(message.parts)) {
+    return null
+  }
+  for (const part of message.parts) {
+    const pendingQuestion = pendingQuestionToolCall(part)
+    if (pendingQuestion !== null) {
+      return pendingQuestion
+    }
+  }
+  return null
 }
 
 export function messageHasWaitingTool(message: unknown): boolean {

@@ -1,6 +1,10 @@
 /// <reference types="bun-types" />
 import { describe, expect, test } from "bun:test"
 
+import {
+  QUESTION_TOOL_NAMES,
+  latestAssistantTurnPendingQuestionTool,
+} from "@oh-my-opencode/utils"
 import { OMO_INTERNAL_INITIATOR_MARKER } from "../../shared/internal-initiator-marker"
 import { hasUnansweredQuestion } from "./pending-question-detection"
 
@@ -172,4 +176,27 @@ describe("hasUnansweredQuestion", () => {
     ]
     expect(hasUnansweredQuestion(messages)).toBe(true)
   })
+
+  for (const toolName of QUESTION_TOOL_NAMES) {
+    test(`#given ${toolName} #when both question consumers inspect the last assistant turn #then both cover the shared question tool set`, () => {
+      // given
+      const messages = [{
+        info: { role: "assistant" },
+        parts: [{
+          type: "tool",
+          callID: "call-shared-question-tool",
+          tool: toolName,
+          state: { status: "pending" },
+        }],
+      }]
+
+      // when
+      const enforcerDetected = hasUnansweredQuestion(messages)
+      const atlasDetected = latestAssistantTurnPendingQuestionTool(messages)
+
+      // then
+      expect(enforcerDetected).toBeTrue()
+      expect(atlasDetected?.callID).toBe("call-shared-question-tool")
+    })
+  }
 })
