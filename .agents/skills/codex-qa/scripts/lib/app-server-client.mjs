@@ -22,20 +22,52 @@
 // Prints a JSON summary to stdout. Exit 0 iff the turn completed, every
 // EXPECT_HOOK fired with status "completed", and no hook completed failed.
 import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export function parseExpectedHooks(value) {
   return (value || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-export function summarizeRun({ turnStatus, assistantText, threadId, turnId, expectHook, hooks, stderr }) {
+export function summarizeRun({
+  turnStatus,
+  assistantText,
+  threadId,
+  turnId,
+  expectHook,
+  allowedBlockedHooks = [],
+  hooks,
+  stderr,
+  stopFixture = null,
+}) {
   const completed = new Set(
     hooks
-      .filter((h) => h.method === "hook/completed" && h.status === "completed")
+      .filter(
+        (h) =>
+          h.method === "hook/completed" &&
+          (h.status === "completed" || (h.status === "blocked" && allowedBlockedHooks.includes(h.eventName))),
+      )
       .map((h) => h.eventName),
   );
   const missingHooks = expectHook.filter((eventName) => !completed.has(eventName));
-  const failedHooks = hooks.filter((h) => h.method === "hook/completed" && h.status !== "completed");
+  const failedHooks = hooks.filter(
+    (h) =>
+      h.method === "hook/completed" &&
+      h.status !== "completed" &&
+      !(h.status === "blocked" && allowedBlockedHooks.includes(h.eventName)),
+  );
+  const hookOutputEntries = hooks.flatMap((hook) =>
+    (hook.entries ?? []).map((entry) => ({
+      eventName: hook.eventName,
+      sourcePath: hook.sourcePath,
+      kind: entry.kind,
+      text: entry.text,
+    })),
+  );
+  const hookDecisions = hooks
+    .filter((hook) => hook.method === "hook/completed" && hook.status === "blocked")
+    .map((hook) => ({ eventName: hook.eventName, sourcePath: hook.sourcePath, decision: "block" }));
   const ok = turnStatus === "completed" && missingHooks.length === 0 && failedHooks.length === 0;
   return {
     ok,
@@ -47,8 +79,38 @@ export function summarizeRun({ turnStatus, assistantText, threadId, turnId, expe
     missingHooks,
     failedHooks,
     hooks,
+    hookOutputEntries,
+    hookDecisions,
+    stopFixture,
     stderrTail: stderr.split("\n").slice(-10).join("\n"),
   };
+}
+
+function seedStopFixture(cwd, status, sessionId) {
+  const omoDirectory = join(cwd, ".omo");
+  const plansDirectory = join(omoDirectory, "plans");
+  const planPath = join(plansDirectory, "stop-hook-fixture.md");
+  const boulderPath = join(omoDirectory, "boulder.json");
+  const work = {
+    work_id: "cqa-stop-work",
+    active_plan: ".omo/plans/stop-hook-fixture.md",
+    plan_name: "cqa-stop-hook-fixture",
+    status,
+    started_at: "2026-07-31T00:00:00.000Z",
+    session_ids: [`codex:${sessionId}`],
+  };
+  mkdirSync(plansDirectory, { recursive: true });
+  writeFileSync(planPath, "## TODOs\n- [ ] 1. Verify the Stop hook fixture\n");
+  writeFileSync(
+    boulderPath,
+    JSON.stringify({
+      schema_version: 2,
+      active_work_id: work.work_id,
+      works: { [work.work_id]: work },
+      ...work,
+    }),
+  );
+  return { status, boulderPath, planPath, sessionId };
 }
 
 function main() {
@@ -58,9 +120,16 @@ function main() {
   const CWD = process.env.QA_CWD || process.cwd();
   const DEADLINE_MS = Number(process.env.DEADLINE_MS || 60000);
   const EXPECT = parseExpectedHooks(process.env.EXPECT_HOOK || "");
+  const ALLOW_BLOCKED_HOOK = parseExpectedHooks(process.env.ALLOW_BLOCKED_HOOK || "");
+  const CAPTURE_HOOK_OUTPUT = parseExpectedHooks(process.env.CAPTURE_HOOK_OUTPUT || "");
+  const STOP_FIXTURE_STATUS = process.env.STOP_FIXTURE_STATUS || "";
 
   if (!MOCK_PORT) {
     console.error("app-server-client: MOCK_PORT is required (start lib/mock-model.mjs first)");
+    process.exit(2);
+  }
+  if (STOP_FIXTURE_STATUS !== "" && STOP_FIXTURE_STATUS !== "active" && STOP_FIXTURE_STATUS !== "waiting_on_human") {
+    console.error("app-server-client: STOP_FIXTURE_STATUS must be active or waiting_on_human");
     process.exit(2);
   }
 
@@ -87,6 +156,7 @@ function main() {
   let threadId = null;
   let turnId = null;
   let turnStatus = null;
+  let stopFixture = null;
   let buf = "";
   let finished = false;
 
@@ -101,7 +171,17 @@ function main() {
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       stderr += `\n[driver] failed to terminate app-server: ${message}\n`;
     }
-    const summary = summarizeRun({ turnStatus, assistantText, threadId, turnId, expectHook: EXPECT, hooks, stderr });
+    const summary = summarizeRun({
+      turnStatus,
+      assistantText,
+      threadId,
+      turnId,
+      expectHook: EXPECT,
+      allowedBlockedHooks: ALLOW_BLOCKED_HOOK,
+      hooks,
+      stderr,
+      stopFixture,
+    });
     console.log(JSON.stringify(summary, null, 2));
     process.exit(summary.ok ? 0 : 1);
   }
@@ -112,6 +192,7 @@ function main() {
       send({ id: 2, method: "thread/start", params: { cwd: CWD } });
     } else if (msg.id === 2 && msg.result) {
       threadId = msg.result.thread?.id;
+      if (STOP_FIXTURE_STATUS !== "") stopFixture = seedStopFixture(CWD, STOP_FIXTURE_STATUS, threadId);
       send({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: PROMPT }] } });
     } else if (msg.id === 3 && msg.result) {
       turnId = msg.result.turn?.id;
@@ -125,6 +206,13 @@ function main() {
         pluginId: run.pluginId,
         hookName: run.hookName ?? run.name,
         runId: run.id,
+        sourcePath: run.sourcePath,
+        statusMessage: run.statusMessage,
+        entries: CAPTURE_HOOK_OUTPUT.includes(run.eventName) && Array.isArray(run.entries)
+          ? run.entries
+              .filter((entry) => entry !== null && typeof entry === "object" && typeof entry.kind === "string" && typeof entry.text === "string")
+              .map((entry) => ({ kind: entry.kind, text: entry.text }))
+          : [],
       });
     } else if (msg.method === "item/completed") {
       const item = msg.params?.item;

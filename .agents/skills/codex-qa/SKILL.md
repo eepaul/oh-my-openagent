@@ -53,6 +53,7 @@ Windows.
 | You need to… | Run | Deep dive |
 |---|---|---|
 | Prove a plugin hook fires in a LIVE Codex turn (first-party) | `scripts/app-server-drive.sh --plugin` | [app-server.md](references/app-server.md) |
+| Prove a Stop hook's live decision with a Boulder fixture | `scripts/stop-hook-drive.sh --self-test` | [app-server.md](references/app-server.md) |
 | Prove the app-server driver itself works (no plugin, fast) | `scripts/app-server-drive.sh --self-test` | [app-server.md](references/app-server.md) |
 | Install the LOCAL build into an isolated home + assert it landed | `scripts/install-verify.sh --self-test` | [install-verify.md](references/install-verify.md) |
 | Pin ONE component's hook logic deterministically (no codex) | `scripts/hook-unit-probe.sh --self-test` | [components-hooks.md](references/components-hooks.md) |
@@ -65,6 +66,7 @@ Windows.
 |---|---|
 | `scripts/lib/common.sh --self-check` | deps present; isolated `CODEX_HOME` is created inside a sandbox and auto-removed on exit; mock model serves the Responses SSE; real `~/.codex` unchanged |
 | `scripts/app-server-drive.sh` | `--self-test`: a bare turn completes and the mock assistant text comes back. `--plugin`: installs local omo, drives a turn, and asserts `hook/completed` for `sessionStart,userPromptSubmit` |
+| `scripts/stop-hook-drive.sh` | installs local omo in an isolated home, binds a Boulder fixture to the live app-server thread, captures the start-work-continuation Stop hook notifications and stdout; `--self-test` proves `waiting_on_human` emits no block while `active` emits `decision:"block"` |
 | `scripts/install-verify.sh` | local omo installs into the isolated home; `config.toml` enables `omo@sisyphuslabs`; component bins + agent TOMLs linked in the sandbox; real `~/.codex` unchanged |
 | `scripts/hook-unit-probe.sh` | the `ultrawork` component injects `<ultrawork-mode>` on an `ulw` UserPromptSubmit (also a manual `--component/--event` mode) |
 | `scripts/tui-smoke.sh` | the real codex TUI boots in the isolated home, renders, and survives (no early exit); captures the pane |
@@ -93,6 +95,9 @@ assertion-grade hook behavior.
 - **Component / hook logic** (`packages/omo-codex/plugin/components/*`):
   `hook-unit-probe.sh` for the exact stdout, THEN `app-server-drive.sh --plugin`
   to prove the live wiring. See [components-hooks.md](references/components-hooks.md).
+- **Stop-hook decision logic** (`Stop` / `SubagentStop`):
+  `stop-hook-drive.sh --self-test` to bind an isolated Boulder fixture to the
+  live thread and assert both a no-block case and an active blocking control.
 - **Installer / config.toml** (`packages/omo-codex/src/install/*`):
   `install-verify.sh`.
 - **Anything that affects a live session** (hooks, agents, MCP wiring):

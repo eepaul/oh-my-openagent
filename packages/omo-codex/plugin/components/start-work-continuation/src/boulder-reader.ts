@@ -5,7 +5,7 @@ import { getPlanChecklist, type PlanChecklist } from "./plan-checklist.js";
 export type { PlanChecklist } from "./plan-checklist.js";
 export { getPlanChecklist } from "./plan-checklist.js";
 
-type BoulderWorkStatus = "active" | "paused" | "completed" | "abandoned";
+export type BoulderWorkStatus = "active" | "paused" | "completed" | "abandoned" | "waiting_on_human";
 
 type BoulderWork = {
 	readonly activePlan: string;
@@ -146,8 +146,16 @@ function resolveTrackedPath(baseDirectory: string, trackedPath: string): string 
 	return isAbsolute(trackedPath) ? resolve(trackedPath) : resolve(baseDirectory, trackedPath);
 }
 
-function parseBoulderWorkStatus(value: unknown): BoulderWorkStatus | undefined {
-	if (value === "active" || value === "paused" || value === "completed" || value === "abandoned") return value;
+export function parseBoulderWorkStatus(value: unknown): BoulderWorkStatus | undefined {
+	if (
+		value === "active" ||
+		value === "paused" ||
+		value === "completed" ||
+		value === "abandoned" ||
+		value === "waiting_on_human"
+	) {
+		return value;
+	}
 	return undefined;
 }
 
@@ -171,8 +179,17 @@ function parseIsoToMs(value: string | undefined): number | null {
 	return Number.isNaN(parsed) ? null : parsed;
 }
 
-function isContinuableStatus(status: BoulderWorkStatus | undefined): boolean {
-	return status === "active" || status === "paused";
+export function isContinuableStatus(status: BoulderWorkStatus | undefined): boolean {
+	switch (status) {
+		case "active":
+		case "paused":
+			return true;
+		case "waiting_on_human":
+		case "completed":
+		case "abandoned":
+		case undefined:
+			return false;
+	}
 }
 
 function getBoulderFilePath(cwd: string): string {

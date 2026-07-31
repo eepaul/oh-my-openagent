@@ -42,6 +42,67 @@ describe("app-server-client summary", () => {
     expect(summary.failedHooks).toEqual([]);
   });
 
+  it("#given a completed Stop hook with stdout #when summarized #then its decision output is retained", () => {
+    const summary = summarizeRun({
+      turnStatus: "completed",
+      assistantText: "ok",
+      threadId: "thread",
+      turnId: "turn",
+      expectHook: ["stop"],
+      hooks: [
+        {
+          method: "hook/completed",
+          eventName: "stop",
+          status: "completed",
+          source: "plugin",
+          sourcePath: "/plugin/components/start-work-continuation/hooks/hooks.json",
+          entries: [{ kind: "stop", text: '{"decision":"block"}' }],
+        },
+      ],
+      stderr: "",
+    });
+
+    expect(summary.hookOutputEntries).toEqual([
+      {
+        eventName: "stop",
+        sourcePath: "/plugin/components/start-work-continuation/hooks/hooks.json",
+        kind: "stop",
+        text: '{"decision":"block"}',
+      },
+    ]);
+  });
+
+  it("#given an allowed blocked Stop hook #when summarized #then it records a block decision without failing the driver", () => {
+    const summary = summarizeRun({
+      turnStatus: "completed",
+      assistantText: "ok",
+      threadId: "thread",
+      turnId: "turn",
+      expectHook: ["stop"],
+      allowedBlockedHooks: ["stop"],
+      hooks: [
+        {
+          method: "hook/completed",
+          eventName: "stop",
+          status: "blocked",
+          source: "plugin",
+          sourcePath: "/plugin/components/start-work-continuation/hooks/hooks.json",
+          entries: [],
+        },
+      ],
+      stderr: "",
+    });
+
+    expect(summary.ok).toBe(true);
+    expect(summary.hookDecisions).toEqual([
+      {
+        eventName: "stop",
+        sourcePath: "/plugin/components/start-work-continuation/hooks/hooks.json",
+        decision: "block",
+      },
+    ]);
+  });
+
   it("#given a comma-separated expectation #when parsed #then whitespace and empties are ignored", () => {
     expect(parseExpectedHooks(" sessionStart, ,userPromptSubmit ")).toEqual(["sessionStart", "userPromptSubmit"]);
   });

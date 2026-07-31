@@ -48,19 +48,18 @@ cqa_codex_bin() {
 
 cqa_real_codex_home() { printf '%s' "${HOME}/.codex"; }
 
+cqa_real_home_config_sum() {
+  local cfg; cfg="$(cqa_real_codex_home)/config.toml"
+  if [ -f "$cfg" ]; then shasum "$cfg" 2>/dev/null | awk '{print $1}'; else printf 'ABSENT'; fi
+}
+
 # Snapshot the real ~/.codex/config.toml so we can prove QA never touched it.
 cqa_guard_real_home() {
-  local cfg; cfg="$(cqa_real_codex_home)/config.toml"
-  if [ -f "$cfg" ]; then
-    CQA_REAL_HOME_SUM="$(shasum "$cfg" 2>/dev/null | awk '{print $1}')"
-  else
-    CQA_REAL_HOME_SUM="ABSENT"
-  fi
+  CQA_REAL_HOME_SUM="$(cqa_real_home_config_sum)"
 }
 
 cqa_assert_real_home_unchanged() {
-  local cfg now; cfg="$(cqa_real_codex_home)/config.toml"
-  if [ -f "$cfg" ]; then now="$(shasum "$cfg" 2>/dev/null | awk '{print $1}')"; else now="ABSENT"; fi
+  local now; now="$(cqa_real_home_config_sum)"
   if [ "$now" = "$CQA_REAL_HOME_SUM" ]; then
     cqa_pass "real ~/.codex/config.toml unchanged ($now)"
     return 0
