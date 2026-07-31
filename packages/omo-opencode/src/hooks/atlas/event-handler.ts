@@ -6,12 +6,8 @@ import { isRealUserMessage } from "../../shared/internal-initiator-marker"
 import { log } from "../../shared/logger"
 import { isRecord } from "../../shared/record-type-guard"
 import { compactionGraceTracker, type CompactionGraceTracker } from "../shared/compaction-grace-tracker"
-import {
-  captureHumanMessageResume,
-  resumeQuestionToolCompletion,
-  scheduleHumanMessageResume,
-} from "../shared/human-resume-controller"
-import { isResumableHumanInput } from "../shared/resumable-human-input"
+import { createDeferredHumanInputTracker } from "../shared/deferred-human-input"
+import { resumeQuestionToolCompletion } from "../shared/human-resume-controller"
 import { clearFinalWaveGate } from "./final-wave-gate-store"
 import { HOOK_NAME } from "./hook-name"
 import { isAbortError } from "./is-abort-error"
@@ -82,6 +78,7 @@ export function createAtlasEventHandler(input: {
 }): (arg: { event: { type: string; properties?: unknown } }) => Promise<void> {
   const { ctx, options, sessions, getState } = input
   const humanInputTracker = input.compactionGraceTracker ?? compactionGraceTracker
+  const deferredHumanInput = createDeferredHumanInputTracker(humanInputTracker)
 
   return async ({ event }): Promise<void> => {
     const props = isRecord(event.properties) ? event.properties : undefined
@@ -137,17 +134,15 @@ export function createAtlasEventHandler(input: {
         clearFinalWaveGate(ctx.directory, work?.work_id ?? "")
       }
       const messageID = typeof info?.id === "string" ? info.id : undefined
-      if (messageID !== undefined && isResumableHumanInput({ info, parts }, {
-        compactionGraceActive: humanInputTracker.isCompactionGraceActive(sessionID),
-      })) {
-        const snapshot = captureHumanMessageResume({
+      if (messageID !== undefined && info?.role === "user" && parts === undefined) {
+        deferredHumanInput.rememberPending(sessionID, messageID)
+      } else if (messageID !== undefined) {
+        deferredHumanInput.scheduleIfResumable({
           directory: ctx.directory,
           sessionID,
           messageID,
+          message: { info, parts },
         })
-        if (snapshot !== null) {
-          scheduleHumanMessageResume({ tracker: humanInputTracker, snapshot })
-        }
       }
       return
     }
@@ -157,6 +152,25 @@ export function createAtlasEventHandler(input: {
       const sessionID = resolveMessageEventSessionID(props)
       const role = typeof info?.["role"] === "string" ? info["role"] : undefined
       const questionCallID = resolveQuestionToolCompletion(props)
+      const part = props?.["part"]
+      const partMessageID = isRecord(part) && typeof part["messageID"] === "string"
+        ? part["messageID"]
+        : undefined
+
+      if (
+        sessionID !== undefined
+        && partMessageID !== undefined
+        && isEventPart(part)
+        && part.type === "text"
+        && deferredHumanInput.consumePending(sessionID, partMessageID)
+      ) {
+        deferredHumanInput.scheduleIfResumable({
+          directory: ctx.directory,
+          sessionID,
+          messageID: partMessageID,
+          message: { role: "user", parts: [part] },
+        })
+      }
 
       if (sessionID !== undefined && questionCallID !== undefined) {
         await resumeQuestionToolCompletion({
@@ -192,6 +206,7 @@ export function createAtlasEventHandler(input: {
       const sessionID = resolveSessionEventID(props)
       if (sessionID) {
         humanInputTracker.clearSession(sessionID)
+        deferredHumanInput.clearSession(sessionID)
         const deletedState = sessions.get(sessionID)
         if (deletedState?.pendingRetryTimer) {
           clearTimeout(deletedState.pendingRetryTimer)
@@ -207,6 +222,7 @@ export function createAtlasEventHandler(input: {
       const sessionID = resolveSessionEventID(props)
       if (sessionID) {
         humanInputTracker.recordCompaction(sessionID)
+        deferredHumanInput.clearSession(sessionID)
         const compactedState = sessions.get(sessionID)
         if (compactedState?.pendingRetryTimer) {
           clearTimeout(compactedState.pendingRetryTimer)
