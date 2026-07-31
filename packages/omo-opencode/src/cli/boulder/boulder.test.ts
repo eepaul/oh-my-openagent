@@ -139,6 +139,7 @@ describe("boulder command", () => {
   }
 
   it("prints multi-work text mode with plan names and percentages", async () => {
+    // given
     const directory = createTempDirectory()
     createdDirectories.push(directory)
     seedPlanAndState(directory)
@@ -148,8 +149,10 @@ describe("boulder command", () => {
     captureOutput("stdout", stdout)
     captureOutput("stderr", stderr)
 
+    // when
     const exitCode = await boulder({ directory })
 
+    // then
     expect(exitCode).toBe(0)
     expect(stderr.value).toBe("")
     expect(stdout.value).toContain("plan: alpha")
@@ -162,6 +165,7 @@ describe("boulder command", () => {
   })
 
   it("prints json mode with expected fields", async () => {
+    // given
     const directory = createTempDirectory()
     createdDirectories.push(directory)
     seedPlanAndState(directory)
@@ -169,7 +173,10 @@ describe("boulder command", () => {
     const stdout = { value: "" }
     captureOutput("stdout", stdout)
 
+    // when
     const exitCode = await boulder({ directory, json: true })
+
+    // then
     expect(exitCode).toBe(0)
 
     const parsed = JSON.parse(stdout.value)
@@ -182,18 +189,23 @@ describe("boulder command", () => {
   })
 
   it("returns 1 when boulder state does not exist", async () => {
+    // given
     const directory = createTempDirectory()
     createdDirectories.push(directory)
 
     const stderr = { value: "" }
     captureOutput("stderr", stderr)
 
+    // when
     const exitCode = await boulder({ directory })
+
+    // then
     expect(exitCode).toBe(1)
     expect(stderr.value).toContain("No boulder state found")
   })
 
   it("returns 1 when workId filter matches none", async () => {
+    // given
     const directory = createTempDirectory()
     createdDirectories.push(directory)
     seedPlanAndState(directory)
@@ -201,12 +213,16 @@ describe("boulder command", () => {
     const stderr = { value: "" }
     captureOutput("stderr", stderr)
 
+    // when
     const exitCode = await boulder({ directory, workId: "missing" })
+
+    // then
     expect(exitCode).toBe(1)
     expect(stderr.value).toContain("No boulder state found")
   })
 
   it("returns one work when workId filter matches", async () => {
+    // given
     const directory = createTempDirectory()
     createdDirectories.push(directory)
     seedPlanAndState(directory)
@@ -214,7 +230,10 @@ describe("boulder command", () => {
     const stdout = { value: "" }
     captureOutput("stdout", stdout)
 
+    // when
     const exitCode = await boulder({ directory, workId: "work-beta", json: true })
+
+    // then
     expect(exitCode).toBe(0)
 
     const parsed = JSON.parse(stdout.value)
