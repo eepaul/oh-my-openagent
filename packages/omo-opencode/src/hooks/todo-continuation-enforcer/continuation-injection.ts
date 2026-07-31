@@ -8,10 +8,7 @@ import {
   resolveRegisteredAgentName,
 } from "../../features/claude-code-session-state"
 import {
-  createInternalAgentContinuationTextPart,
-  isAmbiguousPostDispatchPromptFailure,
   normalizeSDKResponse,
-  resolveInheritedPromptTools,
 } from "../../shared"
 import {
   findNearestMessageWithFields,
@@ -24,20 +21,18 @@ import {
   getAgentConfigKey,
   normalizeAgentForPrompt,
 } from "../../shared/agent-display-names"
-import { dispatchInternalPrompt, isInternalPromptDispatchAccepted } from "../shared/prompt-async-gate"
 
 import {
   CONTINUATION_PROMPT,
-  CONTINUATION_COOLDOWN_MS,
   DEFAULT_SKIP_AGENTS,
   HOOK_NAME,
 } from "./constants"
 import { isCompactionGuardActive } from "./compaction-guard"
 import { getMessageDir } from "./message-directory"
-import { isTokenLimitError } from "./token-limit-detection"
 import { getIncompleteCount } from "./todo"
 import type { ResolvedMessageInfo, Todo } from "./types"
 import type { SessionStateStore } from "./session-state"
+import { dispatchContinuationPrompt } from "./continuation-prompt-dispatch"
 import { getWaitingOnHumanPlanForSession, notifyWaitingOnHuman } from "./waiting-on-human-plan"
 
 function hasWritePermission(tools: Record<string, ToolPermission> | undefined): boolean {
@@ -206,7 +201,7 @@ ${todoList}`
     return
   }
 
-  const waitingPlan = getWaitingOnHumanPlanForSession(ctx.directory, sessionID)
+  const waitingPlan = await getWaitingOnHumanPlanForSession(ctx.directory, sessionID)
   if (waitingPlan) {
     sessionStateStore.cancelCountdown(sessionID)
     await notifyWaitingOnHuman({
@@ -224,95 +219,16 @@ ${todoList}`
     return
   }
 
-  if (injectionState) {
-    injectionState.inFlight = true
-  }
-
-  try {
-    log(`[${HOOK_NAME}] Injecting continuation`, {
-      sessionID,
-      agent: promptAgent,
-      model,
-      incompleteCount: freshIncompleteCount,
-    })
-
-    const inheritedTools = resolveInheritedPromptTools(sessionID, tools)
-
-    const launchModel = model
-      ? { providerID: model.providerID, modelID: model.modelID }
-      : undefined
-    const launchVariant = model?.variant
-
-    const promptResult = await dispatchInternalPrompt({
-      mode: "async",
-      client: ctx.client,
-      sessionID,
-      source: HOOK_NAME,
-      settleMs: 0,
-      queueBehavior: "defer",
-      semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
-      preDispatchGuard: () =>
-        isContinuationStopped?.(sessionID) !== true
-        && getWaitingOnHumanPlanForSession(ctx.directory, sessionID) === undefined,
-      input: {
-        path: { id: sessionID },
-        body: {
-          agent: promptAgent,
-          ...(launchModel ? { model: launchModel } : {}),
-          ...(launchVariant ? { variant: launchVariant } : {}),
-          ...(inheritedTools ? { tools: inheritedTools } : {}),
-          parts: [createInternalAgentContinuationTextPart(prompt)],
-        },
-        query: { directory: ctx.directory },
-      },
-    })
-    if (promptResult.status === "failed") {
-      if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
-        if (injectionState) {
-          injectionState.inFlight = false
-          injectionState.lastInjectedAt = Date.now()
-          injectionState.awaitingPostInjectionProgressCheck = true
-          injectionState.continuationResponseObserved = false
-          injectionState.continuationBlockReason = undefined
-          injectionState.pendingUserMessageID = undefined
-          injectionState.consecutiveFailures = 0
-        }
-        return
-      }
-      throw promptResult.error
-    }
-    if (!isInternalPromptDispatchAccepted(promptResult)) {
-      log(`[${HOOK_NAME}] Injection skipped by promptAsync gate`, { sessionID, status: promptResult.status })
-      if (injectionState) {
-        injectionState.inFlight = false
-      }
-      return
-    }
-
-    log(`[${HOOK_NAME}] Injection successful`, { sessionID, status: promptResult.status })
-    if (injectionState) {
-      injectionState.inFlight = false
-      injectionState.lastInjectedAt = Date.now()
-      injectionState.awaitingPostInjectionProgressCheck = true
-      injectionState.continuationResponseObserved = false
-      injectionState.continuationBlockReason = undefined
-      injectionState.pendingUserMessageID = undefined
-      injectionState.consecutiveFailures = 0
-    }
-  } catch (error) {
-    log(`[${HOOK_NAME}] Injection failed`, { sessionID, error: String(error) })
-    if (injectionState) {
-      injectionState.inFlight = false
-      injectionState.lastInjectedAt = Date.now()
-      injectionState.consecutiveFailures = (injectionState.consecutiveFailures ?? 0) + 1
-
-      const errorObj = error instanceof Error
-        ? { name: error.name, message: error.message }
-        : { message: String(error) }
-      if (isTokenLimitError(errorObj)) {
-        injectionState.tokenLimitDetected = true
-        log(`[${HOOK_NAME}] Token limit error detected during injection, stopping continuation`, { sessionID })
-      }
-    }
-  }
+  await dispatchContinuationPrompt({
+    ctx,
+    sessionID,
+    promptAgent,
+    model,
+    tools,
+    prompt,
+    incompleteCount: freshIncompleteCount,
+    injectionState,
+    sessionStateStore,
+    isContinuationStopped,
+  })
 }

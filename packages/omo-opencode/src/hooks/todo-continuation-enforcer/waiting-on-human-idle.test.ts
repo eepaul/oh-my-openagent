@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 
+import { enterWaitingOnHuman } from "@oh-my-opencode/boulder-state"
+import { getWorkForSession } from "../../features/boulder-state"
 import { _resetForTesting } from "../../features/claude-code-session-state"
 import { releaseAllPromptAsyncReservationsForTesting } from "../shared/prompt-async-gate"
 import { createTodoContinuationEnforcer } from "."
@@ -35,9 +37,9 @@ describe("todo continuation waiting-on-human idle gate", () => {
     _resetForTesting()
   })
 
-  test("#given a bound all-blocked plan and incomplete session todos #when the session idles #then the plan intentionally overrides todos with one passive notification", async () => {
+  test("#given a bound work durably waiting on a question response and incomplete session todos #when the session idles #then persisted waiting overrides todos with one passive notification", async () => {
     // given
-    const fixture = createWaitingOnHumanFixture({ plan: BLOCKED_PLAN, sessionID: "ses_waiting_idle" })
+    const fixture = createWaitingOnHumanFixture({ plan: PENDING_PLAN, sessionID: "ses_waiting_idle" })
     fixtures.push(fixture)
     const promptCalls: Array<{ readonly sessionID: string; readonly text: string }> = []
     const { notifier, notifications } = createWaitingOnHumanNotifierSpy()
@@ -45,6 +47,15 @@ describe("todo continuation waiting-on-human idle gate", () => {
       waitingOnHumanNotifier: notifier,
       countdownScheduler: timerProbe.scheduler,
     })
+    const work = getWorkForSession(fixture.directory, fixture.sessionID)
+    if (work === null) {
+      throw new Error("Expected a boulder work bound to the fixture session")
+    }
+    expect(enterWaitingOnHuman(fixture.directory, work.work_id, {
+      reason: "Await the answer to question call_waiting_idle",
+      source: "question-tool",
+      question_call_id: "call_waiting_idle",
+    })).toBeTrue()
 
     // when
     await hook.handler({ event: { type: "session.idle", properties: { sessionID: fixture.sessionID } } })

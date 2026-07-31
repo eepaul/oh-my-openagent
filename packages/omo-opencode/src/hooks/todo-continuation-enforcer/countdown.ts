@@ -82,7 +82,7 @@ export function startCountdown(args: {
       return
     }
 
-    const waitingPlan = getWaitingOnHumanPlanForSession(ctx.directory, sessionID)
+    const waitingPlan = await getWaitingOnHumanPlanForSession(ctx.directory, sessionID)
     if (waitingPlan) {
       await notifyWaitingOnHuman({
         ctx,

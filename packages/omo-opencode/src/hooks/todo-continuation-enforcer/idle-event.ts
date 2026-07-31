@@ -1,26 +1,25 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { BackgroundManager } from "../../features/background-agent"
-import { getWorkForSession, resolveBoulderPlanPathForWork } from "../../features/boulder-state"
+import { getWorkForSession } from "../../features/boulder-state"
 import { getSessionAgent, handedBackSyncSessions } from "../../features/claude-code-session-state"
 import { normalizeSDKResponse } from "../../shared"
 import { getAgentConfigKey } from "../../shared/agent-display-names"
 import { log } from "../../shared/logger"
 import { latestAssistantTurnBlocksInternalPrompt } from "../../shared/prompt-async-gate/pending-tool-turn"
 
-import { isAwaitingFinalWaveApproval } from "../atlas/final-wave-gate-store"
 import { isLastAssistantMessageAborted } from "./abort-detection"
+import { consumeBoulderIdleWaitingGate } from "./boulder-idle-waiting-gate"
 import { acknowledgeCompactionGuard, isCompactionGuardActive } from "./compaction-guard"
 import { ABORT_WINDOW_MS, CONTINUATION_COOLDOWN_MS, DEFAULT_SKIP_AGENTS, FAILURE_RESET_WINDOW_MS, HOOK_NAME, MAX_CONSECUTIVE_FAILURES } from "./constants"
 import { startCountdown } from "./countdown"
 import { systemCountdownScheduler } from "./countdown-scheduler"
-import { hasUnansweredQuestion } from "./pending-question-detection"
+import { consumeQuestionIdlePromotion } from "./question-idle-promotion-gate"
 import { resolveLatestMessageInfo } from "./resolve-message-info"
 import type { SessionStateStore } from "./session-state"
 import { shouldStopForStagnation } from "./stagnation-detection"
 import { getIncompleteCount } from "./todo"
 import type { CountdownScheduler, MessageWithInfo, ResolvedMessageInfo, Todo } from "./types"
 import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
-import { getWaitingOnHumanPlan, notifyWaitingOnHuman } from "./waiting-on-human-plan"
 
 export async function handleSessionIdle(args: {
   ctx: PluginInput
@@ -89,35 +88,15 @@ export async function handleSessionIdle(args: {
   }
 
   const boulderWork = getWorkForSession(ctx.directory, sessionID)
-  if (boulderWork) {
-    const planPath = resolveBoulderPlanPathForWork(ctx.directory, boulderWork)
-    if (isAwaitingFinalWaveApproval(ctx.directory, boulderWork.work_id, planPath)) {
-      log(`[${HOOK_NAME}] Skipped: boulder awaiting durable final-wave approval`, {
-        sessionID,
-        workId: boulderWork.work_id,
-      })
-      return
-    }
-
-    const waitingPlan = getWaitingOnHumanPlan(planPath, boulderWork.plan_name)
-    if (waitingPlan) {
-      sessionStateStore.cancelCountdown(sessionID)
-      await notifyWaitingOnHuman({
-        ctx,
-        sessionID,
-        waitingPlan,
-        notifier: waitingOnHumanNotifier,
-        isContinuationStopped,
-      })
-      log(`[${HOOK_NAME}] Skipped: boulder plan waiting on a human decision`, {
-        sessionID,
-        planPath,
-        blockedCount: waitingPlan.blockedCount,
-      })
-      return
-    }
-
-    waitingOnHumanNotifier?.reset(sessionID)
+  if (await consumeBoulderIdleWaitingGate({
+    ctx,
+    sessionID,
+    boulderWork,
+    sessionStateStore,
+    waitingOnHumanNotifier,
+    isContinuationStopped,
+  })) {
+    return
   }
 
   const hasRunningBgTasks = backgroundManager
@@ -141,10 +120,16 @@ export async function handleSessionIdle(args: {
       log(`[${HOOK_NAME}] Skipped: last assistant message was aborted (API fallback)`, { sessionID })
       return
     }
-    if (hasUnansweredQuestion(prefetchedMessages)) {
-      log(`[${HOOK_NAME}] Skipped: pending question awaiting user response`, { sessionID })
+    const questionMessages = await consumeQuestionIdlePromotion({
+      ctx,
+      sessionID,
+      boulderWork,
+      messages: prefetchedMessages,
+    })
+    if (questionMessages === null) {
       return
     }
+    prefetchedMessages = questionMessages
     if (latestAssistantTurnBlocksInternalPrompt(prefetchedMessages)) {
       log(`[${HOOK_NAME}] Skipped: pending internal continuation response`, { sessionID })
       return
