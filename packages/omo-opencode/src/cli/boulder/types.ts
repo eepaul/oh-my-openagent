@@ -1,4 +1,5 @@
 import type { BoulderWorkStatus } from "../../features/boulder-state"
+import type { BoulderWaitingMetadata } from "@oh-my-opencode/boulder-state"
 
 export interface BoulderOptions {
   directory?: string
@@ -21,6 +22,7 @@ export interface BoulderCliWork {
   remaining_tasks: number
   percentage: number
   session_count: number
+  waiting?: BoulderWaitingMetadata
   current_task?: {
     task_key: string
     task_title: string

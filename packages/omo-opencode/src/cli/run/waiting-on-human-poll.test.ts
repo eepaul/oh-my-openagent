@@ -30,7 +30,12 @@ function createContext(directory: string, todos: readonly Todo[]): RunContext {
   }
 }
 
-function writeBoulderFixture(directory: string, plan: string): void {
+function writeBoulderFixture(input: {
+  readonly directory: string
+  readonly plan: string
+  readonly status?: "active" | "waiting_on_human"
+}): void {
+  const { directory, plan, status = "active" } = input
   const planPath = join(directory, ".omo", "plans", "waiting-plan.md")
   mkdirSync(join(directory, ".omo", "plans"), { recursive: true })
   writeFileSync(planPath, plan)
@@ -38,6 +43,7 @@ function writeBoulderFixture(directory: string, plan: string): void {
     active_plan: planPath,
     plan_name: "waiting-plan",
     agent: "atlas",
+    status,
     started_at: "2026-07-29T00:00:00.000Z",
     session_ids: ["test-session"],
   }))
@@ -65,10 +71,14 @@ afterEach(() => {
 })
 
 describe("waiting-on-human CLI run completion", () => {
-  it("#given a waiting plan and incomplete session todos #when polling #then it reports waiting and exits successfully", async () => {
+  it("#given a persisted waiting work with incomplete normal tasks #when polling #then it reports waiting and exits successfully", async () => {
     // given
     const directory = createTestDirectory()
-    writeBoulderFixture(directory, "- [x] finished\n- [~] 2. needs approval\n")
+    writeBoulderFixture({
+      directory,
+      plan: "- [ ] 1. continue\n",
+      status: "waiting_on_human",
+    })
     const ctx = createContext(directory, [{ id: "todo", content: "pending", status: "pending", priority: "high" }])
     const eventState = createEventState()
     eventState.mainSessionIdle = true
@@ -90,15 +100,53 @@ describe("waiting-on-human CLI run completion", () => {
     // then
     const output = logSpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n")
     expect(exitCode).toBe(0)
-    expect(output).toContain('Plan "waiting-plan" is waiting on a human decision (1 task(s) marked [~]).')
+    expect(output).toContain('Plan "waiting-plan" is waiting on a human decision')
     expect(output).not.toContain("All tasks completed.")
+    logSpy.mockRestore()
+  })
+
+  it("#given active work that becomes persisted waiting during polling #when polling again #then it honors the refreshed state", async () => {
+    // given
+    const directory = createTestDirectory()
+    writeBoulderFixture({ directory, plan: "- [ ] 1. continue\n" })
+    const ctx = createContext(directory, [])
+    const eventState = createEventState()
+    eventState.mainSessionIdle = true
+    eventState.hasReceivedMeaningfulWork = true
+    const logSpy = spyOn(console, "log").mockImplementation(() => {})
+    const abortController = new AbortController()
+    let promoted = false
+    const clock = createClock((elapsed) => {
+      if (elapsed >= 2 && !promoted) {
+        promoted = true
+        writeBoulderFixture({
+          directory,
+          plan: "- [ ] 1. continue\n",
+          status: "waiting_on_human",
+        })
+      }
+      if (elapsed >= 5) abortController.abort()
+    })
+
+    // when
+    const exitCode = await pollForCompletion(ctx, eventState, abortController, {
+      pollIntervalMs: 1,
+      minStabilizationMs: 1,
+      now: clock.now,
+      sleep: clock.sleep,
+    })
+
+    // then
+    const output = logSpy.mock.calls.map((call) => String(call[0] ?? "")).join("\n")
+    expect(exitCode).toBe(0)
+    expect(output).toContain('Plan "waiting-plan" is waiting on a human decision')
     logSpy.mockRestore()
   })
 
   it("#given a truly complete plan #when polling #then it preserves the completed output", async () => {
     // given
     const directory = createTestDirectory()
-    writeBoulderFixture(directory, "- [x] 1. finished\n")
+    writeBoulderFixture({ directory, plan: "- [x] 1. finished\n" })
     const ctx = createContext(directory, [])
     const eventState = createEventState()
     eventState.mainSessionIdle = true

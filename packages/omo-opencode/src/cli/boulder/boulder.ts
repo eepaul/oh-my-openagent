@@ -91,6 +91,7 @@ function buildCliWork(directory: string, work: BoulderWorkState): BoulderCliWork
       ? Math.round((progress.completed / progress.total) * 100)
       : 0,
     session_count: work.session_ids.length,
+    ...(work.waiting === undefined ? {} : { waiting: work.waiting }),
     current_task: currentTask
       ? {
         task_key: currentTask.key,

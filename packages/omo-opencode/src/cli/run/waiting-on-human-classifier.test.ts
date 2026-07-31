@@ -52,8 +52,9 @@ function writeBoulderFixture(input: {
   readonly plan: string
   readonly sessionIds: readonly string[]
   readonly sessionOrigins?: Readonly<Record<string, "direct" | "appended">>
+  readonly status?: "active" | "waiting_on_human"
 }): void {
-  const { directory, plan, sessionIds, sessionOrigins } = input
+  const { directory, plan, sessionIds, sessionOrigins, status = "active" } = input
   const planPath = join(directory, ".omo", "plans", "waiting-plan.md")
   mkdirSync(join(directory, ".omo", "plans"), { recursive: true })
   writeFileSync(planPath, plan)
@@ -61,6 +62,7 @@ function writeBoulderFixture(input: {
     active_plan: planPath,
     plan_name: "waiting-plan",
     agent: "atlas",
+    status,
     started_at: "2026-07-29T00:00:00.000Z",
     session_ids: sessionIds,
     ...(sessionOrigins === undefined ? {} : { session_origins: sessionOrigins }),
@@ -121,6 +123,43 @@ describe("waiting-on-human boulder continuation classification", () => {
 
     // then
     expect(result).toBe("active")
+  })
+
+  it("#given a persisted waiting work with runnable plan tasks #when checking boulder continuation #then it is classified as waiting", async () => {
+    // given
+    const directory = createTestDirectory()
+    writeBoulderFixture({
+      directory,
+      plan: "- [ ] 1. continue\n",
+      sessionIds: ["test-session"],
+      status: "waiting_on_human",
+    })
+    const ctx = createContext({ directory })
+
+    // when
+    const result = await classifyBoulderContinuation(directory, ctx.sessionID, ctx.client)
+
+    // then
+    expect(result).toEqual({
+      waiting: {
+        planName: "waiting-plan",
+        blockedCount: 0,
+      },
+    })
+  })
+
+  it("#given corrupt boulder state #when checking boulder continuation #then it does not crash", async () => {
+    // given
+    const directory = createTestDirectory()
+    mkdirSync(join(directory, ".omo"), { recursive: true })
+    writeFileSync(join(directory, ".omo", "boulder.json"), "{not-json")
+    const ctx = createContext({ directory })
+
+    // when
+    const result = await classifyBoulderContinuation(directory, ctx.sessionID, ctx.client)
+
+    // then
+    expect(result).toBe("none")
   })
 
   it("#given a waiting boulder and an active background marker #when checking completion #then the run remains pending", async () => {

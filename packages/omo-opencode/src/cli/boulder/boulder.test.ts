@@ -89,12 +89,17 @@ function seedPlanAndState(directory: string): void {
             work_id: "work-beta",
             active_plan: planBPath,
             plan_name: "beta",
-            status: "completed",
+            status: "waiting_on_human",
             started_at: "2026-05-10T01:00:00.000Z",
             ended_at: "2026-05-10T01:10:00.000Z",
             elapsed_ms: 600000,
             updated_at: "2026-05-10T01:10:00.000Z",
             session_ids: ["ses-3"],
+            waiting: {
+              reason: "Beta requires approval.",
+              since: "2026-05-10T01:10:00.000Z",
+              source: "plan-blocked",
+            },
             task_sessions: {},
           },
         },
@@ -151,6 +156,8 @@ describe("boulder command", () => {
     expect(stdout.value).toContain("plan: beta")
     expect(stdout.value).toContain("progress: 50% (1/2)")
     expect(stdout.value).toContain("progress: 100% (2/2)")
+    expect(stdout.value).toContain("status: waiting_on_human")
+    expect(stdout.value).toContain("reason: Beta requires approval.")
     expect(stdout.value).toContain("elapsed:")
   })
 
@@ -170,6 +177,8 @@ describe("boulder command", () => {
     expect(parsed.works[0]).toHaveProperty("work_id")
     expect(parsed.works[0]).toHaveProperty("percentage")
     expect(parsed.works[0]).toHaveProperty("remaining_tasks")
+    expect(parsed.works[1].status).toBe("waiting_on_human")
+    expect(parsed.works[1].waiting.reason).toBe("Beta requires approval.")
   })
 
   it("returns 1 when boulder state does not exist", async () => {

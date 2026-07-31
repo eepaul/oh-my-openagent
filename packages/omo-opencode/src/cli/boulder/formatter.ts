@@ -16,6 +16,10 @@ function colorizeStatus(status: BoulderWorkStatus): string {
     return color.yellow(status)
   }
 
+  if (status === "waiting_on_human") {
+    return color.magenta(status)
+  }
+
   return color.red(status)
 }
 
@@ -41,6 +45,7 @@ function formatWorkBlock(work: BoulderCliWork): string {
     `elapsed: ${elapsed}`,
     `sessions: ${work.session_count}`,
     `current task: ${formatCurrentTask(work)}`,
+    ...(work.waiting === undefined ? [] : [`reason: ${work.waiting.reason}`]),
   ].join("\n")
 }
 

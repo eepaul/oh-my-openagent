@@ -1,5 +1,10 @@
-import { normalizeSessionId, readBoulderState, resolveBoulderPlanPath } from "../../features/boulder-state"
-import { getPlanChecklist, isPlanLifecycleComplete, isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
+import { getBoulderWorks, normalizeSessionId, readBoulderState } from "../../features/boulder-state"
+import {
+  checkPlanWaiting,
+  getPlanChecklist,
+  isPlanLifecycleComplete,
+  resolveBoulderPlanPathForWork,
+} from "@oh-my-opencode/boulder-state"
 import { getSessionAgent } from "../../features/claude-code-session-state"
 import {
   getActiveContinuationMarkerReason,
@@ -10,6 +15,7 @@ import { isSessionInBoulderLineage } from "../../hooks/atlas/boulder-session-lin
 import { getLastAgentFromSession } from "../../hooks/atlas/session-last-agent"
 import { getAgentConfigKey } from "../../shared/agent-display-names"
 import { readState as readRalphLoopState } from "../../hooks/ralph-loop/storage"
+import type { BoulderWorkState } from "../../features/boulder-state"
 import type { RunContext } from "./types"
 
 export interface ContinuationState {
@@ -61,21 +67,29 @@ export async function classifyBoulderContinuation(
   const boulder = readBoulderState(directory)
   if (!boulder || !client) return "none"
 
+  const works = getBoulderWorks(boulder)
+  const activeWork = boulder.active_work_id === undefined
+    ? undefined
+    : works.find((candidate) => candidate.work_id === boulder.active_work_id)
+  const [firstWork] = works
+  const work = activeWork ?? firstWork
+  if (!work) return "none"
+
   const normalizedSessionID = normalizeSessionId(sessionID)
-  const normalizedTrackedSessionIDs = boulder.session_ids.map((trackedSessionID) => normalizeSessionId(trackedSessionID))
+  const normalizedTrackedSessionIDs = work.session_ids.map((trackedSessionID) => normalizeSessionId(trackedSessionID))
   if (!normalizedTrackedSessionIDs.includes(normalizedSessionID)) {
     return "none"
   }
 
-  const sessionOrigin = boulder.session_origins?.[sessionID] ?? boulder.session_origins?.[normalizedSessionID]
+  const sessionOrigin = work.session_origins?.[sessionID] ?? work.session_origins?.[normalizedSessionID]
   if (sessionOrigin === "direct") {
-    return classifyBoundBoulderContinuation(directory, boulder)
+    return classifyBoundBoulderContinuation(directory, work)
   }
 
   const trackedAncestorSessionIDs = normalizedTrackedSessionIDs
     .filter((trackedSessionID) => trackedSessionID !== normalizedSessionID)
   if (trackedAncestorSessionIDs.length === 0) {
-    return classifyBoundBoulderContinuation(directory, boulder)
+    return classifyBoundBoulderContinuation(directory, work)
   }
 
   const isTrackedDescendant = await isTrackedDescendantSession(client, sessionID, trackedAncestorSessionIDs)
@@ -89,7 +103,7 @@ export async function classifyBoulderContinuation(
     return "none"
   }
 
-  const requiredAgentKey = getAgentConfigKey(boulder.agent ?? "atlas")
+  const requiredAgentKey = getAgentConfigKey(work.agent ?? "atlas")
   const sessionAgentKey = getAgentConfigKey(sessionAgent)
   if (
     sessionAgentKey !== requiredAgentKey
@@ -98,18 +112,18 @@ export async function classifyBoulderContinuation(
     return "none"
   }
 
-  return classifyBoundBoulderContinuation(directory, boulder)
+  return classifyBoundBoulderContinuation(directory, work)
 }
 
 function classifyBoundBoulderContinuation(
   directory: string,
-  boulder: NonNullable<ReturnType<typeof readBoulderState>>,
+  work: BoulderWorkState,
 ): BoulderContinuationClassification {
-  const planPath = resolveBoulderPlanPath(directory, boulder)
-  if (isPlanWaitingOnHuman(planPath)) {
+  const planPath = resolveBoulderPlanPathForWork(directory, work)
+  if (checkPlanWaiting(directory, work).waiting) {
     return {
       waiting: {
-        planName: boulder.plan_name,
+        planName: work.plan_name,
         blockedCount: getPlanChecklist(planPath).blocked ?? 0,
       },
     }
