@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { enterWaitingOnHuman } from "@oh-my-opencode/boulder-state"
 import {
   createBoulderState,
   getWorkResumeOptions,
@@ -11,12 +12,13 @@ import {
 } from "../../features/boulder-state"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import { buildStartWorkContextInfo } from "./context-info-builder"
-import { buildExistingSessionContext } from "./context-info-formatters"
+import { buildExistingSessionContext, buildMultipleActiveWorksContext } from "./context-info-formatters"
 import {
   buildPlanDiscoveryContext,
   shouldResumeExistingState,
   shouldResumeSingleWorkOption,
 } from "./plan-discovery-context"
+import { buildMissingPlanContext } from "./plan-selection"
 
 const testDirectories: string[] = []
 
@@ -122,7 +124,64 @@ describe("start-work waiting-on-human plan discovery", () => {
     expect(readBoulderState(directory)?.session_ids).toContain("opencode:current-session")
   })
 
-  it("#given unrelated waiting state and another preferred plan #when building start-work context #then it treats the waiting state as live", () => {
+  it("#given one persisted waiting work #when automatically selecting the sole resume option #then it becomes active", async () => {
+    // given
+    const directory = createTestDirectory()
+    const planPath = writeWaitingPlan(directory, "sole-waiting")
+    writeBoulderState(directory, createBoulderState(planPath, "prior-session", "atlas", undefined))
+    const workId = readBoulderState(directory)?.active_work_id
+    if (!workId) throw new Error("expected active work id")
+    expect(enterWaitingOnHuman(directory, workId, {
+      reason: "approval is required",
+      source: "plan-blocked",
+    })).toBe(true)
+
+    // when
+    await buildStartWorkContextInfo({
+      ctx: createPluginInput(directory),
+      explicitPlanName: null,
+      existingState: readBoulderState(directory),
+      sessionId: "current-session",
+      timestamp: "2026-07-29T00:00:00.000Z",
+      activeAgent: "atlas",
+      worktreePath: undefined,
+      worktreeBlock: "",
+    })
+    const persisted = readBoulderState(directory)
+
+    // then
+    expect(persisted?.status).toBe("active")
+    expect(persisted?.waiting).toBeUndefined()
+  })
+
+  it("#given a persisted waiting reason and blocked plan #when formatting resume choices #then persisted reason takes priority in every label", () => {
+    // given
+    const directory = createTestDirectory()
+    const planPath = writeWaitingPlan(directory, "reason-priority")
+    writeBoulderState(directory, createBoulderState(planPath, "prior-session", "atlas", undefined))
+    const workId = readBoulderState(directory)?.active_work_id
+    if (!workId) throw new Error("expected active work id")
+    expect(enterWaitingOnHuman(directory, workId, {
+      reason: "approval is required",
+      source: "plan-blocked",
+    })).toBe(true)
+    const option = getWorkResumeOptions(directory)[0]
+    if (!option) throw new Error("expected resume option")
+
+    // when
+    const resumeContext = buildMultipleActiveWorksContext({
+      resumeOptions: [option],
+      sessionId: "current-session",
+      timestamp: "2026-07-31T00:00:00.000Z",
+    })
+    const planContext = buildMissingPlanContext("missing", [planPath], [option])
+
+    // then
+    expect(resumeContext).toContain("approval is required")
+    expect(planContext).toContain("approval is required")
+  })
+
+  it("#given unrelated waiting state and another preferred plan #when building start-work context #then it treats the waiting state as live", async () => {
     // given
     const directory = createTestDirectory()
     const waitingPlanPath = writeWaitingPlan(directory, "waiting")
@@ -130,7 +189,7 @@ describe("start-work waiting-on-human plan discovery", () => {
     const state = createBoulderState(waitingPlanPath, "prior-session", "atlas", undefined)
     writeBoulderState(directory, state)
     // when
-    const context = buildStartWorkContextInfo({
+    const context = await buildStartWorkContextInfo({
       ctx: createPluginInput(directory),
       explicitPlanName: null,
       existingState: state,

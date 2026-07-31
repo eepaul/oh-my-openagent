@@ -1,10 +1,12 @@
 import {
   findPrometheusPlans,
+  getWorkResumeOptions,
 } from "../../features/boulder-state"
 import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import type { BoulderState, BoulderWorkResumeOption } from "../../features/boulder-state"
 import { buildAutoSelectedPlanContextWithStateInit } from "./work-initializer"
 import { formatIncompletePlanList, pickPreferredIncompletePlan } from "./plan-selection"
+import { selectWorkForStartWork, type SelectedWorkResumeResult } from "./selected-work-resume"
 
 export function shouldResumeExistingState(input: {
   readonly existingState: BoulderState | null
@@ -48,6 +50,18 @@ export function shouldResumeSingleWorkOption(input: {
   return !findPrometheusPlans(directory).some(
     (planPath) => planPath === preferredPlanPath && !isPlanLifecycleComplete(planPath),
   )
+}
+
+export async function selectSingleWorkOption(input: {
+  readonly directory: string
+  readonly option: BoulderWorkResumeOption
+  readonly preferredPlanPath: string | null
+}): Promise<SelectedWorkResumeResult | null> {
+  if (!shouldResumeSingleWorkOption(input)) {
+    return null
+  }
+
+  return await selectWorkForStartWork({ directory: input.directory, workId: input.option.work_id })
 }
 
 export function buildPlanDiscoveryContext(params: {
@@ -123,7 +137,7 @@ export function buildPlanDiscoveryContext(params: {
 Current Time: ${timestamp}
 Session ID: ${sessionId}
 
-${formatIncompletePlanList(incompletePlans, true)}
+${formatIncompletePlanList(incompletePlans, true, getWorkResumeOptions(directory))}
 
 Ask the user which plan to work on. Present the options above and wait for their response.
 ${worktreeBlock}

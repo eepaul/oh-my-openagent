@@ -49,7 +49,7 @@ describe("buildStartWorkContextInfo", () => {
     }
   })
 
-  test("lists multiple active works and asks agent to choose resume vs new when no explicit plan", () => {
+  test("lists multiple active works and asks agent to choose resume vs new when no explicit plan", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     const planAPath = writePlan("plan-alpha", "## TODOs\n- [ ] 1. Alpha")
@@ -64,7 +64,7 @@ describe("buildStartWorkContextInfo", () => {
     })
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: readExistingState(),
@@ -82,7 +82,7 @@ describe("buildStartWorkContextInfo", () => {
     expect(clearSpy).toHaveBeenCalledTimes(0)
   })
 
-  test("auto-resumes when exactly one active work exists and no explicit plan", () => {
+  test("auto-resumes when exactly one active work exists and no explicit plan", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     const planPath = writePlan("single-active-plan", "## TODOs\n- [ ] 1. Single task")
@@ -90,7 +90,7 @@ describe("buildStartWorkContextInfo", () => {
     writeBoulderState(testDirectory, initialState)
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: readExistingState(),
@@ -108,7 +108,7 @@ describe("buildStartWorkContextInfo", () => {
     expect(clearSpy).toHaveBeenCalledTimes(0)
   })
 
-  test("explicit plan selects matching work only and never clears boulder state", () => {
+  test("explicit plan selects matching work only and never clears boulder state", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     const planAPath = writePlan("explicit-plan-a", "## TODOs\n- [ ] 1. A")
@@ -123,7 +123,7 @@ describe("buildStartWorkContextInfo", () => {
     })
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: "explicit-plan-a",
       existingState: readExistingState(),
@@ -145,13 +145,13 @@ describe("buildStartWorkContextInfo", () => {
     expect(nextState?.active_work_id).toBe(selectedWork?.work_id)
   })
 
-  test("falls back to auto-select latest plan when no works exist", () => {
+  test("falls back to auto-select latest plan when no works exist", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     const coldStartPlanPath = writePlan("cold-start-plan", "## TODOs\n- [ ] 1. Cold start")
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: null,
@@ -170,13 +170,13 @@ describe("buildStartWorkContextInfo", () => {
     expect(clearSpy).toHaveBeenCalledTimes(0)
   })
 
-  test("#given multiple incomplete plans and a preferred session plan #when no work exists #then preferred plan is started", () => {
+  test("#given multiple incomplete plans and a preferred session plan #when no work exists #then preferred plan is started", async () => {
     // given
     const ignoredPlanPath = writePlan("ignored-plan", "## TODOs\n- [ ] 1. Ignored")
     const preferredPlanPath = writePlan("preferred-plan", "## TODOs\n- [ ] 1. Preferred")
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: null,
@@ -202,14 +202,14 @@ describe("buildStartWorkContextInfo", () => {
     expect(nextState?.worktree_path).toBe("/tmp/preferred-worktree")
   })
 
-  test("#given existing active state with stale agent and worktree #when resuming #then state is rewritten for current session", () => {
+  test("#given existing active state with stale agent and worktree #when resuming #then state is rewritten for current session", async () => {
     // given
     const planPath = writePlan("resume-existing-plan", "## TODOs\n- [ ] 1. Continue")
     const initialState = createBoulderState(planPath, "session-old", "sisyphus", "/tmp/old-worktree")
     writeBoulderState(testDirectory, initialState)
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: readExistingState(),
@@ -232,7 +232,7 @@ describe("buildStartWorkContextInfo", () => {
     expect(nextState?.session_ids).toEqual(["opencode:session-old", "opencode:session-current"])
   })
 
-  test("#given explicit completed work matches #when starting that plan #then active work remains unchanged", () => {
+  test("#given explicit completed work matches #when starting that plan #then active work remains unchanged", async () => {
     // given
     const activePlanPath = writePlan("active-plan", "## TODOs\n- [ ] 1. Continue")
     const completedPlanPath = writePlan("completed-plan", "## TODOs\n- [x] 1. Done")
@@ -255,7 +255,7 @@ describe("buildStartWorkContextInfo", () => {
     selectActiveWork(testDirectory, activeWorkId)
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: "completed-plan",
       existingState: readExistingState(),
@@ -274,7 +274,7 @@ describe("buildStartWorkContextInfo", () => {
     expect(nextState?.active_work_id).not.toBe(completedWorkId)
   })
 
-  test("#given one active work and stale preferred plan #when starting work #then active work resumes", () => {
+  test("#given one active work and stale preferred plan #when starting work #then active work resumes", async () => {
     // given
     const activePlanPath = writePlan("single-active-plan", "## TODOs\n- [ ] 1. Continue")
     const stalePreferredPlanPath = join(testDirectory, ".omo", "plans", "missing-plan.md")
@@ -282,7 +282,7 @@ describe("buildStartWorkContextInfo", () => {
     writeBoulderState(testDirectory, initialState)
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: null,
       existingState: readExistingState(),
@@ -302,13 +302,13 @@ describe("buildStartWorkContextInfo", () => {
     expect(readBoulderState(testDirectory)?.active_plan).toBe(activePlanPath)
   })
 
-  test("auto-selects the only incomplete plan when explicit plan name misses", () => {
+  test("auto-selects the only incomplete plan when explicit plan name misses", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     const actualPlanPath = writePlan("full-site-audit-fix-plan", "## TODOs\n- [ ] 1. Fix audit findings")
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: "mot-vat-notifications-plan",
       existingState: null,
@@ -329,14 +329,14 @@ describe("buildStartWorkContextInfo", () => {
     expect(clearSpy).toHaveBeenCalledTimes(0)
   })
 
-  test("asks for selection when explicit plan name misses with multiple incomplete plans", () => {
+  test("asks for selection when explicit plan name misses with multiple incomplete plans", async () => {
     // given
     const clearSpy = spyOn(boulderState, "clearBoulderState")
     writePlan("first-candidate-plan", "## TODOs\n- [ ] 1. First task")
     writePlan("second-candidate-plan", "## TODOs\n- [ ] 1. Second task")
 
     // when
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: "unmatched-plan",
       existingState: null,
@@ -356,7 +356,7 @@ describe("buildStartWorkContextInfo", () => {
     expect(clearSpy).toHaveBeenCalledTimes(0)
   })
 
-  test("keeps existing works when explicit new plan is started", () => {
+  test("keeps existing works when explicit new plan is started", async () => {
     // given
     writePlan("work-a", "## TODOs\n- [ ] 1. Work A")
     const workBPath = writePlan("work-b", "## TODOs\n- [ ] 1. Work B")
@@ -389,7 +389,7 @@ describe("buildStartWorkContextInfo", () => {
     }
 
     // when
-    buildStartWorkContextInfo({
+    await buildStartWorkContextInfo({
       ctx: createPluginInput(),
       explicitPlanName: "new-plan-c",
       existingState: readExistingState(),
@@ -414,12 +414,12 @@ describe("buildStartWorkContextInfo", () => {
   })
 
   describe("notepad scaffolding side-effect", () => {
-    test("#given single incomplete plan and no active work #when buildStartWorkContextInfo auto-selects it #then scaffolds .omo/notepads/<plan-basename>/{learnings,decisions,issues,problems}.md", () => {
+    test("#given single incomplete plan and no active work #when buildStartWorkContextInfo auto-selects it #then scaffolds .omo/notepads/<plan-basename>/{learnings,decisions,issues,problems}.md", async () => {
       // given
       writePlan("auto-scaffold-plan", "## TODOs\n- [ ] 1. Auto task")
 
       // when
-      buildStartWorkContextInfo({
+      await buildStartWorkContextInfo({
         ctx: createPluginInput(),
         explicitPlanName: null,
         existingState: null,
@@ -438,12 +438,12 @@ describe("buildStartWorkContextInfo", () => {
       expect(existsSync(join(notepadDir, "problems.md"))).toBe(true)
     })
 
-    test("#given explicit plan name matching a plan file #when built with explicitPlanName #then scaffolds notepad for that plan", () => {
+    test("#given explicit plan name matching a plan file #when built with explicitPlanName #then scaffolds notepad for that plan", async () => {
       // given
       writePlan("explicit-scaffold-plan", "## TODOs\n- [ ] 1. Explicit task")
 
       // when
-      buildStartWorkContextInfo({
+      await buildStartWorkContextInfo({
         ctx: createPluginInput(),
         explicitPlanName: "explicit-scaffold-plan",
         existingState: null,
@@ -462,14 +462,14 @@ describe("buildStartWorkContextInfo", () => {
       expect(existsSync(join(notepadDir, "problems.md"))).toBe(true)
     })
 
-    test("#given existing active boulder state for a plan #when resume path taken #then scaffolds notepad (idempotent - files appear)", () => {
+    test("#given existing active boulder state for a plan #when resume path taken #then scaffolds notepad (idempotent - files appear)", async () => {
       // given
       const planPath = writePlan("resume-scaffold-plan", "## TODOs\n- [ ] 1. Resume task")
       const initialState = createBoulderState(planPath, "session-a", "atlas", "/tmp/worktree-resume")
       writeBoulderState(testDirectory, initialState)
 
       // when
-      buildStartWorkContextInfo({
+      await buildStartWorkContextInfo({
         ctx: createPluginInput(),
         explicitPlanName: null,
         existingState: readExistingState(),
@@ -488,7 +488,7 @@ describe("buildStartWorkContextInfo", () => {
       expect(existsSync(join(notepadDir, "problems.md"))).toBe(true)
     })
 
-    test("#given multiple active works #when built (ask-user branch) #then does NOT create any notepad files", () => {
+    test("#given multiple active works #when built (ask-user branch) #then does NOT create any notepad files", async () => {
       // given
       const planAPath = writePlan("multi-scaffold-plan-a", "## TODOs\n- [ ] 1. Multi A")
       const planBPath = writePlan("multi-scaffold-plan-b", "## TODOs\n- [ ] 1. Multi B")
@@ -502,7 +502,7 @@ describe("buildStartWorkContextInfo", () => {
       })
 
       // when
-      buildStartWorkContextInfo({
+      await buildStartWorkContextInfo({
         ctx: createPluginInput(),
         explicitPlanName: null,
         existingState: readExistingState(),

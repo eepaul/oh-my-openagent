@@ -200,7 +200,7 @@ export function createStartWorkHook(ctx: PluginInput) {
           availablePlans: findPrometheusPlans(ctx.directory),
         })
 
-    const contextInfo = buildStartWorkContextInfo({
+    const contextInfo = await buildStartWorkContextInfo({
       ctx,
       explicitPlanName,
       existingState,

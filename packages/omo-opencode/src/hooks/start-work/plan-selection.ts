@@ -1,6 +1,8 @@
 import { statSync } from "node:fs"
 import { getPlanName, getPlanProgress } from "../../features/boulder-state"
-import { getPlanChecklist, isPlanLifecycleComplete, isPlanWaitingOnHuman } from "@oh-my-opencode/boulder-state"
+import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
+import type { BoulderWorkResumeOption } from "../../features/boulder-state"
+import { formatWaitingOnHumanStatus } from "./context-info-formatters"
 
 function normalizePlanLookupValue(value: string): string {
   return value
@@ -48,13 +50,18 @@ export function pickPreferredIncompletePlan(
 export function formatIncompletePlanList(
   plans: readonly string[],
   includeModifiedTime: boolean,
+  resumeOptions: readonly BoulderWorkResumeOption[] = [],
 ): string {
   return plans
     .map((planPath, index) => {
       const progress = getPlanProgress(planPath)
-      const waitingStatus = isPlanWaitingOnHuman(planPath)
-        ? ` - waiting on human decision (${getPlanChecklist(planPath).blocked ?? 0} task(s) marked [~])`
-        : ""
+      const option = resumeOptions.find((candidate) => candidate.active_plan === planPath)
+      const waiting = formatWaitingOnHumanStatus({
+        planPath,
+        status: option?.status,
+        waiting: option?.waiting,
+      })
+      const waitingStatus = waiting ? ` - ${waiting}` : ""
       const modified = includeModifiedTime
         ? ` - Modified: ${new Date(statSync(planPath).mtimeMs).toISOString()}`
         : ""
@@ -64,7 +71,11 @@ export function formatIncompletePlanList(
     .join("\n")
 }
 
-export function buildMissingPlanContext(explicitPlanName: string, allPlans: readonly string[]): string {
+export function buildMissingPlanContext(
+  explicitPlanName: string,
+  allPlans: readonly string[],
+  resumeOptions: readonly BoulderWorkResumeOption[] = [],
+): string {
   const incompletePlans = allPlans.filter((planPath) => !isPlanLifecycleComplete(planPath))
   if (incompletePlans.length > 0) {
     return `
@@ -73,7 +84,7 @@ export function buildMissingPlanContext(explicitPlanName: string, allPlans: read
 Could not find a plan matching "${explicitPlanName}".
 
 Available incomplete plans:
-${formatIncompletePlanList(incompletePlans, false)}
+${formatIncompletePlanList(incompletePlans, false, resumeOptions)}
 
 Ask the user which plan to work on.`
   }

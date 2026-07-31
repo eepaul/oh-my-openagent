@@ -2,23 +2,27 @@ import {
   getActiveWorks,
   getWorkResumeOptions,
   readBoulderState,
-  selectActiveWork,
 } from "../../features/boulder-state"
 import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import type { BoulderState } from "../../features/boulder-state"
 import { log } from "../../shared/logger"
 import type { PluginInput } from "@opencode-ai/plugin"
-import { buildExistingSessionContext, buildMultipleActiveWorksContext } from "./context-info-formatters"
+import {
+  buildExistingSessionContext,
+  buildMultipleActiveWorksContext,
+  buildWorkResumeRetryContext,
+} from "./context-info-formatters"
 import { buildExplicitPlanContext } from "./explicit-plan-context"
 import {
   buildPlanDiscoveryContext,
+  selectSingleWorkOption,
   shouldDiscoverPlans,
   shouldResumeExistingState,
   shouldResumeSingleWorkOption,
 } from "./plan-discovery-context"
 import { HOOK_NAME } from "./start-work-hook"
 
-export function buildStartWorkContextInfo(params: {
+export async function buildStartWorkContextInfo(params: {
   readonly ctx: PluginInput
   readonly explicitPlanName: string | null
   readonly existingState: ReturnType<typeof readBoulderState>
@@ -28,7 +32,7 @@ export function buildStartWorkContextInfo(params: {
   readonly worktreePath: string | undefined
   readonly worktreeBlock: string
   readonly preferredPlanPath?: string | null
-}): string {
+}): Promise<string> {
   const {
     ctx,
     explicitPlanName,
@@ -42,7 +46,7 @@ export function buildStartWorkContextInfo(params: {
   } = params
   const directory = ctx.directory
   const resumeOptions = getWorkResumeOptions(directory).filter(
-    (option) => option.status === "active" || option.status === "paused",
+    (option) => option.status === "active" || option.status === "paused" || option.status === "waiting_on_human",
   )
 
   if (!explicitPlanName && resumeOptions.length > 1) {
@@ -56,16 +60,20 @@ export function buildStartWorkContextInfo(params: {
   if (!explicitPlanName && resumeOptions.length === 1) {
     const onlyOption = resumeOptions[0]
     if (shouldResumeSingleWorkOption({ directory, option: onlyOption, preferredPlanPath })) {
-      const selectedState = selectActiveWork(directory, onlyOption.work_id)
-      if (selectedState) {
+      const selection = await selectSingleWorkOption({ directory, option: onlyOption, preferredPlanPath })
+      if (selection?.kind === "selected") {
         return buildExistingSessionContext({
-          existingState: selectedState,
+          existingState: selection.state,
           sessionId,
           activeAgent,
           worktreePath,
           worktreeBlock,
           directory,
+          resumedFromHuman: selection.resumedFromHuman,
         })
+      }
+      if (selection?.kind === "retryable-error") {
+        return buildWorkResumeRetryContext({ planName: onlyOption.plan_name, reason: selection.reason })
       }
     }
   }
@@ -83,7 +91,7 @@ export function buildStartWorkContextInfo(params: {
     })
   }
 
-  const contextInfo = buildSelectedContextInfo({
+  const contextInfo = await buildSelectedContextInfo({
     explicitPlanName,
     existingState,
     sessionId,
@@ -111,7 +119,7 @@ export function buildStartWorkContextInfo(params: {
   return contextInfo
 }
 
-function buildSelectedContextInfo(params: {
+async function buildSelectedContextInfo(params: {
   readonly explicitPlanName: string | null
   readonly existingState: BoulderState | null
   readonly sessionId: string
@@ -121,7 +129,7 @@ function buildSelectedContextInfo(params: {
   readonly worktreeBlock: string
   readonly directory: string
   readonly preferredPlanPath: string | null
-}): string {
+}): Promise<string> {
   const {
     explicitPlanName,
     existingState,
@@ -135,7 +143,7 @@ function buildSelectedContextInfo(params: {
   } = params
 
   if (explicitPlanName) {
-    return buildExplicitPlanContext({
+    return await buildExplicitPlanContext({
       explicitPlanName,
       sessionId,
       timestamp,

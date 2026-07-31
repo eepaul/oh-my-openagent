@@ -20,7 +20,7 @@ export function buildAutoSelectedPlanContextInfoOnly(params: {
   const { planPath, sessionId, timestamp, worktreeBlock, reason } = params
   const progress = getPlanProgress(planPath)
   const reasonLine = reason ? `**Reason**: ${reason}\n` : ""
-  const waitingStatus = formatWaitingOnHumanStatus(planPath)
+  const waitingStatus = formatWaitingOnHumanStatus({ planPath })
   const waitingStatusLine = waitingStatus ? `**Status**: ${waitingStatus}\n` : ""
 
   return `
@@ -68,7 +68,13 @@ export function buildMultipleActiveWorksContext(params: {
           ? 0
           : Math.floor((option.progress.completed / option.progress.total) * 100)
 
-      return `${index + 1}. ${option.plan_name} - ${option.progress.completed}/${option.progress.total} (${percent}%) - elapsed: ${formatElapsedHuman(option.elapsed_ms)} - worktree: ${option.worktree_path ?? "current directory"} - sessions: ${option.session_count}`
+      const waitingStatus = formatWaitingOnHumanStatus({
+        planPath: option.active_plan,
+        status: option.status,
+        waiting: option.waiting,
+      })
+      const waitingLabel = waitingStatus ? ` - ${waitingStatus}` : ""
+      return `${index + 1}. ${option.plan_name} - ${option.progress.completed}/${option.progress.total} (${percent}%) - elapsed: ${formatElapsedHuman(option.elapsed_ms)} - worktree: ${option.worktree_path ?? "current directory"} - sessions: ${option.session_count}${waitingLabel}`
     })
     .join("\n")
 
@@ -94,8 +100,9 @@ export function buildExistingSessionContext(params: {
   readonly worktreePath: string | undefined
   readonly worktreeBlock: string
   readonly directory: string
+  readonly resumedFromHuman?: boolean
 }): string {
-  const { existingState, sessionId, activeAgent, worktreePath, worktreeBlock, directory } = params
+  const { existingState, sessionId, activeAgent, worktreePath, worktreeBlock, directory, resumedFromHuman = false } = params
   const planPath = resolveBoulderPlanPath(directory, existingState)
   const progress = getPlanProgress(planPath)
   if (isPlanLifecycleComplete(planPath)) {
@@ -105,7 +112,11 @@ export function buildExistingSessionContext(params: {
 The previous plan (${existingState.plan_name}) has been completed.
 Looking for new plans...`
   }
-  const waitingStatus = formatWaitingOnHumanStatus(planPath)
+  const waitingStatus = formatWaitingOnHumanStatus({
+    planPath,
+    status: existingState.status,
+    waiting: existingState.waiting,
+  })
 
   const effectiveWorktree = worktreePath ?? existingState.worktree_path
   const sessionAlreadyTracked = existingState.session_ids.includes(sessionId)
@@ -143,14 +154,44 @@ Looking for new plans...`
 ${worktreeDisplay}
 
 The current session (${sessionId}) has been added to session_ids.
-Read the plan file and continue from the first unchecked task.`
+Read the plan file and continue from the first unchecked task.${resumedFromHuman ? "\n\nBefore continuing, use the human decision to change each unblocked `- [~]` item back to `- [ ]`." : ""}`
 }
 
-function formatWaitingOnHumanStatus(planPath: string): string | null {
-  if (!isPlanWaitingOnHuman(planPath)) {
+export function buildWorkResumeRetryContext(input: {
+  readonly planName: string
+  readonly reason: "newer-waiting-episode" | "resume-write-failed" | "work-not-found" | "selection-write-failed"
+}): string {
+  const detail = input.reason === "newer-waiting-episode"
+    ? "A newer waiting-on-human episode was detected, so it was left unchanged."
+    : "The selected work could not be persisted in its resumed state."
+
+  return `
+<system-reminder>
+<start-work-resume-error retryable="true">
+## Work Resume Needs Retry
+
+**Plan**: ${input.planName}
+${detail}
+Retry /start-work for this plan after resolving the storage issue or reviewing the newer waiting state.
+</start-work-resume-error>
+</system-reminder>`
+}
+
+export function formatWaitingOnHumanStatus(input: {
+  readonly planPath: string
+  readonly status?: BoulderState["status"] | BoulderWorkResumeOption["status"]
+  readonly waiting?: BoulderState["waiting"] | BoulderWorkResumeOption["waiting"]
+}): string | null {
+  if (input.status === "waiting_on_human") {
+    return input.waiting?.reason
+      ? `waiting on human decision (${input.waiting.reason})`
+      : "waiting on human decision"
+  }
+
+  if (!isPlanWaitingOnHuman(input.planPath)) {
     return null
   }
 
-  const blockedCount = getPlanChecklist(planPath).blocked ?? 0
+  const blockedCount = getPlanChecklist(input.planPath).blocked ?? 0
   return `waiting on human decision (${blockedCount} task(s) marked [~])`
 }

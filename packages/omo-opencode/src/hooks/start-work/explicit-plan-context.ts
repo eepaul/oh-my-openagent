@@ -3,16 +3,21 @@ import {
   getPlanName,
   getPlanProgress,
   getWorkByPlanName,
-  selectActiveWork,
+  getWorkResumeOptions,
 } from "../../features/boulder-state"
 import { isPlanLifecycleComplete } from "@oh-my-opencode/boulder-state"
 import { log } from "../../shared/logger"
 import { HOOK_NAME } from "./start-work-hook"
-import { buildAutoSelectedPlanContextInfoOnly, buildExistingSessionContext } from "./context-info-formatters"
+import {
+  buildAutoSelectedPlanContextInfoOnly,
+  buildExistingSessionContext,
+  buildWorkResumeRetryContext,
+} from "./context-info-formatters"
 import { buildMissingPlanContext, findPlanByName } from "./plan-selection"
+import { selectWorkForStartWork } from "./selected-work-resume"
 import { createNewWorkOrInitialize } from "./work-initializer"
 
-export function buildExplicitPlanContext(params: {
+export async function buildExplicitPlanContext(params: {
   readonly explicitPlanName: string
   readonly sessionId: string
   readonly timestamp: string
@@ -20,7 +25,7 @@ export function buildExplicitPlanContext(params: {
   readonly worktreePath: string | undefined
   readonly worktreeBlock: string
   readonly directory: string
-}): string {
+}): Promise<string> {
   const { explicitPlanName, sessionId, timestamp, activeAgent, worktreePath, worktreeBlock, directory } =
     params
   log(`[${HOOK_NAME}] Explicit plan name requested: ${explicitPlanName}`, { sessionID: sessionId })
@@ -35,17 +40,19 @@ export function buildExplicitPlanContext(params: {
       })
     }
 
-    const selectedState = selectActiveWork(directory, matchedWork.work_id)
-    if (selectedState) {
+    const selection = await selectWorkForStartWork({ directory, workId: matchedWork.work_id })
+    if (selection.kind === "selected") {
       return buildExistingSessionContext({
-        existingState: selectedState,
+        existingState: selection.state,
         sessionId,
         activeAgent,
         worktreePath,
         worktreeBlock,
         directory,
+        resumedFromHuman: selection.resumedFromHuman,
       })
     }
+    return buildWorkResumeRetryContext({ planName: matchedWork.plan_name, reason: selection.reason })
   }
 
   const allPlans = findPrometheusPlans(directory)
@@ -70,7 +77,7 @@ export function buildExplicitPlanContext(params: {
       })
     }
 
-    return buildMissingPlanContext(explicitPlanName, allPlans)
+    return buildMissingPlanContext(explicitPlanName, allPlans, getWorkResumeOptions(directory))
   }
 
   const progress = getPlanProgress(matchedPlan)
