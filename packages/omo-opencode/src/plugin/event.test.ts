@@ -5,8 +5,16 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { createEventHandler, extractErrorMessage } from "./event"
 import { createChatMessageHandler } from "./chat-message"
 import * as openclawRuntimeDispatch from "../openclaw/runtime-dispatch"
-import { _resetForTesting, setMainSession, subagentSessions } from "../features/claude-code-session-state"
+import {
+	_resetForTesting,
+	setMainSession,
+	setSessionAgent,
+	subagentSessions,
+	syncSubagentSessions,
+	syncTaskSessions,
+} from "../features/claude-code-session-state"
 import { clearPendingModelFallback, createModelFallbackHook } from "../hooks/model-fallback/hook"
+import { pollSyncSession } from "../tools/delegate-task/sync-session-poller"
 import {
 	clearAllApprovals,
 	clearAllPending,
@@ -1583,6 +1591,92 @@ describe("createEventHandler - external-directory approval child/parent lifecycl
 })
 
 describe("createEventHandler - retry dedupe lifecycle", () => {
+	it("#given a synchronous task error #when the poller cleans up during hook fan-out #then model fallback does not reclaim the same event", async () => {
+		//#given
+		const sessionID = "ses_sync_task_error"
+		const abortCalls: string[] = []
+		const promptCalls: string[] = []
+		const modelFallback = createModelFallbackHook()
+		let pollResult: string | null = null
+		syncSubagentSessions.add(sessionID)
+		syncTaskSessions.add(sessionID)
+		subagentSessions.add(sessionID)
+		setSessionAgent(sessionID, "sisyphus")
+		const eventHandler = createEventHandler({
+			ctx: asEventHandlerContext({
+				directory: "/tmp",
+				client: {
+					session: {
+						abort: async ({ path }: { path: { id: string } }) => {
+							abortCalls.push(path.id)
+							return {}
+						},
+						prompt: async ({ path }: { path: { id: string } }) => {
+							promptCalls.push(path.id)
+							return {}
+						},
+					},
+				},
+			}),
+			pluginConfig: asPluginConfig({}),
+			firstMessageVariantGate: {
+				markSessionCreated: () => {},
+				clear: () => {},
+			},
+			managers: createEventHandlerManagers(),
+			hooks: createEventHandlerHooks({
+				anthropicContextWindowLimitRecovery: {
+					event: async () => {
+						pollResult = await pollSyncSession(
+							{
+								sessionID: "ses_parent",
+								messageID: "msg_parent",
+								agent: "sisyphus",
+								abort: new AbortController().signal,
+							},
+							cast<Parameters<typeof pollSyncSession>[1]>({
+								session: {
+									status: async () => ({ data: { [sessionID]: { type: "idle" } } }),
+									messages: async () => ({ data: [] }),
+									abort: async () => ({}),
+								},
+							}),
+							{
+								sessionID,
+								agentToUse: "sisyphus",
+								toastManager: null,
+								taskId: undefined,
+							},
+							50,
+						)
+						syncTaskSessions.delete(sessionID)
+						syncSubagentSessions.delete(sessionID)
+						subagentSessions.delete(sessionID)
+					},
+				},
+				modelFallback,
+				stopContinuationGuard: { isStopped: () => false },
+			}),
+		})
+
+		//#when
+		await eventHandler(asEventHandlerInput({
+			event: {
+				type: "session.error",
+				properties: {
+					sessionID,
+					providerID: "openai",
+					modelID: "gpt-5.6-sol",
+					error: { name: "AI_APICallError", message: "Our servers are currently overloaded." },
+				},
+			},
+		}))
+		//#then
+		expect(pollResult).toBe("Our servers are currently overloaded.")
+		expect(abortCalls).toEqual([])
+		expect(promptCalls).toEqual([])
+	})
+
 	it("re-handles same retry key after session recovers to idle status", async () => {
 		const sessionID = "ses_retry_recovery_rearm"
 		setMainSession(sessionID)

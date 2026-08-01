@@ -4,7 +4,14 @@ import type { CreatedHooks } from "../create-hooks";
 import type { Managers } from "../create-managers";
 import type { PluginContext } from "./types";
 
-import { getMainSessionID, subagentSessions, syncSubagentSessions } from "../features/claude-code-session-state";
+import {
+  beginSyncTaskErrorDispatch,
+  endSyncTaskErrorDispatch,
+  getMainSessionID,
+  isSyncTaskFallbackOwned,
+  recordSyncSubagentError,
+  subagentSessions,
+} from "../features/claude-code-session-state";
 import { invalidateContextWindowUsageCache } from "../shared/dynamic-truncator";
 import { resolveSessionEventID } from "../shared/event-session-id";
 import { log } from "../shared/logger";
@@ -53,7 +60,7 @@ export function createEventHandler(args: {
   const teamHandlers = createEventTeamHandlers({ pluginConfig, pluginContext, managers });
 
   const shouldAutoRetrySession = (sessionID: string): boolean => {
-    if (syncSubagentSessions.has(sessionID)) return true;
+    if (isSyncTaskFallbackOwned(sessionID)) return false;
     const mainSessionID = getMainSessionID();
     if (mainSessionID) return sessionID === mainSessionID;
     return !subagentSessions.has(sessionID);
@@ -104,7 +111,7 @@ export function createEventHandler(args: {
     await dispatchIdleOnlyHooks(syntheticIdle);
   };
 
-  return async (input): Promise<void> => {
+  const handleEvent = async (input: EventInput): Promise<void> => {
     pruneRecentSyntheticIdles({
       recentSyntheticIdles,
       recentRealIdles,
@@ -113,6 +120,14 @@ export function createEventHandler(args: {
       dedupWindowMs,
     });
     const syntheticIdle = normalizeSessionStatusToIdle(input) as EventInput | undefined;
+
+    if (input.event.type === "session.error") {
+      const props = input.event.properties as Record<string, unknown> | undefined;
+      const sessionID = resolveSessionEventID(props);
+      if (sessionID && isSyncTaskFallbackOwned(sessionID)) {
+        recordSyncSubagentError(sessionID, extractErrorMessage(props?.error));
+      }
+    }
 
     if (input.event.type === "session.idle") {
       const sessionID = getEventSessionID(input);
@@ -190,7 +205,7 @@ export function createEventHandler(args: {
       if (state.sessionID && ((typeof state.info?.finish === "string" && state.info.finish.length > 0) || state.info?.finish === true)) {
         invalidateContextWindowUsageCache(pluginContext as PluginInput, state.sessionID);
       }
-      if (state.sessionID && state.role === "assistant") {
+      if (state.sessionID && state.role === "assistant" && !isSyncTaskFallbackOwned(state.sessionID)) {
         try {
           const shouldStop = await modelFallbackHandler.handleAssistantMessageUpdated({
             sessionID: state.sessionID,
@@ -210,7 +225,7 @@ export function createEventHandler(args: {
     if (event.type === "session.status") {
       const sessionID = resolveSessionEventID(props);
       const status = props?.status as { type?: string; attempt?: number; message?: string; next?: number } | undefined;
-      if (sessionID) {
+      if (sessionID && !isSyncTaskFallbackOwned(sessionID)) {
         try {
           if (await modelFallbackHandler.handleSessionStatus({ sessionID, status })) return;
         } catch (err) {
@@ -228,7 +243,7 @@ export function createEventHandler(args: {
         const error = props?.error;
         const errorName = extractErrorName(error);
         const errorMessage = extractErrorMessage(error);
-        if (sessionID) {
+        if (sessionID && !isSyncTaskFallbackOwned(sessionID)) {
           await modelFallbackHandler.handleSessionError({ sessionID, errorName, errorMessage, props });
         }
       } catch (err) {
@@ -240,6 +255,17 @@ export function createEventHandler(args: {
       }
 
       await runEventHookSafely("teamMemberErrorHandler", teamHandlers.teamMemberErrorHandler, input);
+    }
+  };
+
+  return async (input): Promise<void> => {
+    const properties = input.event.properties as Record<string, unknown> | undefined;
+    const sessionID = input.event.type === "session.error" ? resolveSessionEventID(properties) : undefined;
+    const ownsErrorDispatch = sessionID !== undefined && beginSyncTaskErrorDispatch(sessionID);
+    try {
+      await handleEvent(input);
+    } finally {
+      if (ownsErrorDispatch) endSyncTaskErrorDispatch(sessionID);
     }
   };
 }
