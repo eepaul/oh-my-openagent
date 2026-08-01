@@ -4,6 +4,7 @@ import { getDefaultSyncPollTimeoutMs, getTimingConfig } from "./timing"
 import { getTerminalSessionError, isSessionComplete } from "./sync-session-turns"
 import { log } from "../../shared/logger"
 import { normalizeSDKResponse } from "../../shared"
+import { takeSyncSubagentError } from "../../features/claude-code-session-state"
 
 export { isSessionComplete } from "./sync-session-turns"
 
@@ -99,6 +100,12 @@ export async function pollSyncSession(
   log("[task] Starting poll loop", { sessionID: input.sessionID, agentToUse: input.agentToUse, maxTurns })
 
   while (true) {
+    const asyncSessionError = takeSyncSubagentError(input.sessionID)
+    if (asyncSessionError !== undefined) {
+      log("[task] Poll detected asynchronous session error", { sessionID: input.sessionID, sessionError: asyncSessionError })
+      return asyncSessionError
+    }
+
     const inactiveElapsedMs = Date.now() - inactiveStart
     if (inactiveElapsedMs >= maxPollTimeMs) {
       timedOut = true

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 declare const require: (name: string) => any
 import { __setTimingConfig, __resetTimingConfig } from "./timing"
+import {
+  _resetForTesting,
+  recordSyncSubagentError,
+} from "../../features/claude-code-session-state"
 
 function createMockCtx(aborted = false) {
   const controller = new AbortController()
@@ -25,9 +29,38 @@ describe("pollSyncSession", () => {
 
   afterEach(() => {
     __resetTimingConfig()
+    _resetForTesting()
   })
 
   describe("native finish-based completion", () => {
+    test("#given session.error was recorded asynchronously #when polling a still-running session #then the error is returned without waiting for timeout", async () => {
+      // given
+      const { pollSyncSession } = require("./sync-session-poller")
+      recordSyncSubagentError("ses_async_error", "Our servers are currently overloaded.")
+      let abortCount = 0
+      const mockClient = {
+        session: {
+          messages: async () => ({ data: [] }),
+          status: async () => ({ data: { ses_async_error: { type: "running" } } }),
+          abort: async () => {
+            abortCount++
+          },
+        },
+      }
+
+      // when
+      const result = await pollSyncSession(createMockCtx(), mockClient, {
+        sessionID: "ses_async_error",
+        agentToUse: "test-agent",
+        toastManager: null,
+        taskId: undefined,
+      }, 50)
+
+      // then
+      expect(result).toBe("Our servers are currently overloaded.")
+      expect(abortCount).toBe(0)
+    })
+
     test("returns terminal session error when assistant message contains info.error", async () => {
       // given: error in assistant message
       const { pollSyncSession } = require("./sync-session-poller")
