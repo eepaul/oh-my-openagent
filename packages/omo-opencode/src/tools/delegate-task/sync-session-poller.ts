@@ -185,18 +185,22 @@ export async function pollSyncSession(
       continue
     }
 
-    if (input.anchorMessageCount !== undefined && messages.length <= input.anchorMessageCount) {
+    const messagesInScope = input.anchorMessageCount === undefined
+      ? messages
+      : messages.slice(input.anchorMessageCount)
+
+    if (messagesInScope.length === 0) {
       continue
     }
 
-    const sessionError = getTerminalSessionError(messages)
+    const sessionError = getTerminalSessionError(messagesInScope)
     if (sessionError) {
       log("[task] Poll detected terminal session error", { sessionID: input.sessionID, sessionError })
       return sessionError
     }
 
-    if (isSessionComplete(messages)) {
-      const currentAssistantId = [...messages].reverse().find((m) => m.info?.role === "assistant")?.info?.id
+    if (isSessionComplete(messagesInScope)) {
+      const currentAssistantId = [...messagesInScope].reverse().find((m) => m.info?.role === "assistant")?.info?.id
       if (isAwaitingChildContinuation(currentAssistantId)) {
         continue
       }
@@ -205,7 +209,7 @@ export async function pollSyncSession(
     }
 
     // Count new assistant turns to circuit-break infinite loops
-    const lastAssistant = [...messages].reverse().find((m) => m.info?.role === "assistant")
+    const lastAssistant = [...messagesInScope].reverse().find((m) => m.info?.role === "assistant")
     if (lastAssistant?.info?.id && lastAssistant.info.id !== lastSeenAssistantId) {
       lastSeenAssistantId = lastAssistant.info.id
       assistantTurnCount++
@@ -221,7 +225,7 @@ export async function pollSyncSession(
       }
     }
 
-    const hasAssistantText = messages.some((m) => {
+    const hasAssistantText = messagesInScope.some((m) => {
       if (m.info?.role !== "assistant") return false
       const parts = m.parts ?? []
       return parts.some((p) => {
@@ -231,7 +235,7 @@ export async function pollSyncSession(
       })
     })
 
-    if (!lastAssistant?.info?.finish && hasAssistantText) {
+    if (input.anchorMessageCount === undefined && !lastAssistant?.info?.finish && hasAssistantText) {
       if (isAwaitingChildContinuation(lastAssistant?.info?.id)) {
         continue
       }
