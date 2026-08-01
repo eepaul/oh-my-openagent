@@ -1,4 +1,11 @@
-import { handedBackSyncSessions, setSessionAgent, subagentSessions, syncSubagentSessions } from "../../features/claude-code-session-state"
+import {
+  clearSyncSubagentError,
+  handedBackSyncSessions,
+  setSessionAgent,
+  subagentSessions,
+  syncSubagentSessions,
+  syncTaskSessions,
+} from "../../features/claude-code-session-state"
 import {
   clearDelegatedChildSessionBootstrap,
   registerDelegatedChildSessionBootstrap,
@@ -23,6 +30,8 @@ export async function registerSyncSessionSideEffects(input: {
 }): Promise<void> {
   subagentSessions.add(input.sessionID)
   syncSubagentSessions.add(input.sessionID)
+  syncTaskSessions.add(input.sessionID)
+  clearSyncSubagentError(input.sessionID)
   handedBackSyncSessions.delete(input.sessionID)
   setSessionAgent(input.sessionID, input.agentToUse)
   const userPermission = input.categoryModel?.tools
@@ -60,6 +69,8 @@ export function cleanupSyncSessionSideEffects(
 ): void {
   subagentSessions.delete(sessionID)
   syncSubagentSessions.delete(sessionID)
+  syncTaskSessions.delete(sessionID)
+  clearSyncSubagentError(sessionID)
   clearDelegatedChildSessionBootstrap(sessionID)
   executorCtx.modelFallbackControllerAccessor?.clearSessionFallbackChain(sessionID)
   SessionCategoryRegistry.remove(sessionID)

@@ -2,7 +2,43 @@ import { getAgentConfigKey } from "../../shared/agent-display-names"
 
 export const subagentSessions = new Set<string>()
 export const syncSubagentSessions = new Set<string>()
+export const syncTaskSessions = new Set<string>()
 export const handedBackSyncSessions = new Set<string>()
+const syncSubagentErrors = new Map<string, string>()
+const syncTaskErrorDispatchCounts = new Map<string, number>()
+
+export function beginSyncTaskErrorDispatch(sessionID: string): boolean {
+  if (!syncTaskSessions.has(sessionID)) return false
+  syncTaskErrorDispatchCounts.set(sessionID, (syncTaskErrorDispatchCounts.get(sessionID) ?? 0) + 1)
+  return true
+}
+
+export function endSyncTaskErrorDispatch(sessionID: string): void {
+  const count = syncTaskErrorDispatchCounts.get(sessionID)
+  if (count === undefined || count <= 1) {
+    syncTaskErrorDispatchCounts.delete(sessionID)
+    return
+  }
+  syncTaskErrorDispatchCounts.set(sessionID, count - 1)
+}
+
+export function isSyncTaskFallbackOwned(sessionID: string): boolean {
+  return syncTaskSessions.has(sessionID) || syncTaskErrorDispatchCounts.has(sessionID)
+}
+
+export function recordSyncSubagentError(sessionID: string, error: string): void {
+  syncSubagentErrors.set(sessionID, error)
+}
+
+export function takeSyncSubagentError(sessionID: string): string | undefined {
+  const error = syncSubagentErrors.get(sessionID)
+  syncSubagentErrors.delete(sessionID)
+  return error
+}
+
+export function clearSyncSubagentError(sessionID: string): void {
+  syncSubagentErrors.delete(sessionID)
+}
 
 let _mainSessionID: string | undefined
 
@@ -78,7 +114,10 @@ export function _resetForTesting(): void {
   _mainSessionID = undefined
   subagentSessions.clear()
   syncSubagentSessions.clear()
+  syncTaskSessions.clear()
   handedBackSyncSessions.clear()
+  syncSubagentErrors.clear()
+  syncTaskErrorDispatchCounts.clear()
   sessionAgentMap.clear()
   registeredAgentNames.clear()
   registeredAgentAliases.clear()
