@@ -16,123 +16,135 @@
   },
   "background_task": {
     "providerConcurrency": {
-      "openai": 10,
-      "kimi-for-coding": 4
+      "openai": 10
     }
   },
   "agents": {
     "sisyphus": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium",
-      "fallback_models": [
-        {
-          "model": "kimi-for-coding/k2p7"
-        }
-      ]
+      "reasoning": "medium"
     },
     "hephaestus": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium"
+      "reasoning": "medium"
     },
     "oracle": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "high"
+      "reasoning": "xhigh"
     },
     "librarian": {
-      "model": "openai/gpt-5.4-mini-fast"
+      "model": "openai/gpt-5.6-luna-fast",
+      "fallback_models": [
+        {
+          "model": "openai/gpt-5.4-nano"
+        }
+      ]
     },
     "explore": {
-      "model": "openai/gpt-5.4-mini-fast"
+      "model": "openai/gpt-5.6-luna-fast",
+      "fallback_models": [
+        {
+          "model": "openai/gpt-5.4-nano"
+        }
+      ]
     },
     "multimodal-looker": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium",
+      "reasoning": "low",
       "fallback_models": [
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "openai/gpt-5-nano"
         }
       ]
     },
     "prometheus": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "high"
+      "reasoning": "high"
     },
     "metis": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "max"
+      "reasoning": "high"
     },
     "momus": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "xhigh"
+      "model": "openai/gpt-5.6-terra",
+      "reasoning": "high",
+      "fallback_models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "xhigh"
+        }
+      ]
     },
     "atlas": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium",
-      "fallback_models": [
-        {
-          "model": "kimi-for-coding/k2p7"
-        }
-      ]
+      "reasoning": "medium"
     },
     "sisyphus-junior": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium",
-      "fallback_models": [
-        {
-          "model": "kimi-for-coding/k2p7"
-        }
-      ]
+      "reasoning": "medium"
     }
   },
   "categories": {
     "visual-engineering": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "medium",
-      "fallback_models": [
+      "models": [
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "medium"
         }
       ]
     },
     "ultrabrain": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "max"
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "max"
+        }
+      ]
     },
     "deep": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "high",
-      "fallback_models": [
+      "models": [
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "medium"
         }
       ]
     },
     "artistry": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "medium"
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "high"
+        }
+      ]
     },
     "quick": {
-      "model": "openai/gpt-5.4-mini"
+      "models": [
+        {
+          "model": "openai/gpt-5.4-mini"
+        }
+      ]
     },
     "unspecified-low": {
-      "model": "openai/gpt-5.6-luna",
-      "variant": "medium",
-      "fallback_models": [
+      "models": [
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "openai/gpt-5.6-terra",
+          "reasoning": "high"
         }
       ]
     },
     "unspecified-high": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "high"
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "high"
+        }
+      ]
     },
     "writing": {
-      "model": "openai/gpt-5.6-luna",
-      "variant": "high",
-      "fallback_models": [
+      "models": [
         {
-          "model": "kimi-for-coding/k2p7"
+          "model": "openai/gpt-5.6-luna",
+          "reasoning": "high"
         }
       ]
     }
