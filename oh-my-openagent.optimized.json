@@ -24,33 +24,33 @@
   "agents": {
     "sisyphus": {
       "model": "anthropic/claude-opus-5",
-      "variant": "max",
+      "reasoning": "max",
       "fallback_models": [
         {
           "model": "kimi-for-coding/k3"
         },
         {
           "model": "openai/gpt-5.6-sol",
-          "variant": "medium"
+          "reasoning": "medium"
         }
       ]
     },
     "hephaestus": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "medium"
+      "reasoning": "medium"
     },
     "oracle": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "xhigh",
+      "reasoning": "xhigh",
       "fallback_models": [
         {
           "model": "anthropic/claude-opus-5",
-          "variant": "max"
+          "reasoning": "max"
         }
       ]
     },
     "librarian": {
-      "model": "openai/gpt-5.4-mini-fast",
+      "model": "openai/gpt-5.6-luna-fast",
       "fallback_models": [
         {
           "model": "anthropic/claude-haiku-4-5"
@@ -61,7 +61,7 @@
       ]
     },
     "explore": {
-      "model": "openai/gpt-5.4-mini-fast",
+      "model": "openai/gpt-5.6-luna-fast",
       "fallback_models": [
         {
           "model": "anthropic/claude-haiku-4-5"
@@ -73,7 +73,7 @@
     },
     "multimodal-looker": {
       "model": "openai/gpt-5.6-sol",
-      "variant": "low",
+      "reasoning": "low",
       "fallback_models": [
         {
           "model": "kimi-for-coding/k3"
@@ -85,46 +85,22 @@
     },
     "prometheus": {
       "model": "anthropic/claude-fable-5",
-      "variant": "xhigh",
-      "fallback_models": [
-        {
-          "model": "kimi-for-coding/k3",
-          "variant": "max"
-        },
-        {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "high"
-        }
-      ]
+      "reasoning": "xhigh"
     },
     "metis": {
-      "model": "anthropic/claude-fable-5",
-      "variant": "max",
-      "fallback_models": [
-        {
-          "model": "anthropic/claude-sonnet-5"
-        },
-        {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "high"
-        },
-        {
-          "model": "kimi-for-coding/k3",
-	  "variant": "max"
-        }
-      ]
+      "model": "anthropic/claude-opus-5"
     },
     "momus": {
       "model": "openai/gpt-5.6-terra",
-      "variant": "high",
+      "reasoning": "high",
       "fallback_models": [
         {
           "model": "openai/gpt-5.6-sol",
-          "variant": "xhigh"
+          "reasoning": "xhigh"
         },
         {
           "model": "anthropic/claude-opus-5",
-          "variant": "max"
+          "reasoning": "max"
         }
       ]
     },
@@ -136,7 +112,7 @@
         },
         {
           "model": "openai/gpt-5.6-sol",
-          "variant": "medium"
+          "reasoning": "medium"
         }
       ]
     },
@@ -148,7 +124,7 @@
         },
         {
           "model": "openai/gpt-5.6-sol",
-          "variant": "medium"
+          "reasoning": "medium"
         }
       ]
     },
@@ -156,7 +132,7 @@
       "fallback_models": [
         {
           "model": "kimi-for-coding/k3",
-          "variant": "max"
+          "reasoning": "max"
         }
       ]
     },
@@ -164,107 +140,108 @@
       "fallback_models": [
         {
           "model": "kimi-for-coding/k3",
-          "variant": "max"
+          "reasoning": "max"
         }
       ]
     }
   },
   "categories": {
     "visual-engineering": {
-      "model": "anthropic/claude-opus-5",
-      "variant": "max",
-      "fallback_models": [
+      "models": [
         {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "high"
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
         },
         {
-          "model": "kimi-for-coding/k3"
+          "model": "kimi-for-coding/k3",
+          "reasoning": "max"
+        },
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "medium"
         }
       ]
     },
     "ultrabrain": {
-      "model": "openai/gpt-5.6-sol",
-      "variant": "xhigh",
-      "fallback_models": [
+      "models": [
         {
-          "model": "anthropic/claude-opus-5",
-          "variant": "max"
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "max"
         }
       ]
     },
     "deep": {
-      "model": "openai/gpt-5.6-terra",
-      "variant": "xhigh",
-      "fallback_models": [
+      "models": [
         {
           "model": "openai/gpt-5.6-sol",
-          "variant": "high"
-        },
-        {
-          "model": "anthropic/claude-opus-5",
-          "variant": "max"
-        },
-        {
-          "model": "kimi-for-coding/k3"
+          "reasoning": "medium"
         }
       ]
     },
     "artistry": {
-      "model": "anthropic/claude-opus-5",
-      "variant": "max",
-      "fallback_models": [
+      "models": [
         {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "high"
+          "model": "anthropic/claude-fable-5",
+          "reasoning": "xhigh"
         },
         {
-          "model": "kimi-for-coding/k3"
+          "model": "kimi-for-coding/k3",
+          "reasoning": "max"
+        },
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "xhigh"
         }
       ]
     },
     "quick": {
-      "model": "openai/gpt-5.4-mini",
-      "fallback_models": [
+      "models": [
         {
-          "model": "anthropic/claude-haiku-4-5"
+          "model": "kimi-for-coding/kimi-for-coding-highspeed"
+        },
+        {
+          "model": "anthropic/claude-haiku-4-5",
+          "reasoning": "off"
         }
       ]
     },
     "unspecified-low": {
-      "model": "openai/gpt-5.6-luna",
-      "variant": "xhigh",
-      "fallback_models": [
+      "models": [
         {
-          "model": "anthropic/claude-sonnet-5"
+          "model": "openai/gpt-5.6-terra",
+          "reasoning": "high"
         },
         {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "medium"
-        },
-        {
-          "model": "kimi-for-coding/k3"
+          "model": "anthropic/claude-sonnet-5",
+          "reasoning": "low"
         }
       ]
     },
     "unspecified-high": {
-      "model": "anthropic/claude-opus-5",
-      "variant": "max",
-      "fallback_models": [
+      "models": [
         {
-          "model": "openai/gpt-5.6-sol",
-          "variant": "high"
+          "model": "kimi-for-coding/k3",
+          "reasoning": "max"
         },
         {
-          "model": "kimi-for-coding/k3"
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "xhigh"
+        },
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "high"
         }
       ]
     },
     "writing": {
-      "model": "kimi-for-coding/k3",
-      "fallback_models": [
+      "models": [
         {
-          "model": "anthropic/claude-sonnet-5"
+          "model": "kimi-for-coding/k3",
+          "reasoning": "low"
+        },
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "low"
         }
       ]
     }
