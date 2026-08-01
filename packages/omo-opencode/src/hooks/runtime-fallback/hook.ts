@@ -4,6 +4,8 @@ import { DEFAULT_CONFIG } from "./constants"
 import { createEventHandler } from "./event-handler"
 import { createFirstPromptWatchdog, observeEventForWatchdog } from "./first-prompt-watchdog"
 import { createMessageUpdateHandler } from "./message-update-handler"
+import { isSyncTaskFallbackOwned } from "../../features/claude-code-session-state"
+import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
 import type { HookDeps, RuntimeFallbackHook, RuntimeFallbackInterval, RuntimeFallbackOptions, RuntimeFallbackPluginInput, RuntimeFallbackTimeout } from "./types"
 
 declare function setInterval(callback: () => void, delay?: number): RuntimeFallbackInterval
@@ -82,6 +84,13 @@ export function createRuntimeFallbackHook(
   const eventHandler = async ({ event }: { event: { type: string; properties?: unknown } }) => {
     ensureInterval()
 
+    const props = event.properties as Record<string, unknown> | undefined
+    const sessionID = event.type === "message.updated"
+      ? resolveMessageEventSessionID(props)
+      : resolveSessionEventID(props)
+    const ownsFallback = event.type === "message.updated" || event.type === "session.status" || event.type === "session.error"
+    if (ownsFallback && sessionID && isSyncTaskFallbackOwned(sessionID)) return
+
     if (config.enabled) {
       observeEventForWatchdog(event, firstPromptWatchdog, (sessionID) => {
         if (deps.sessionAwaitingFallbackResult.has(sessionID)) {
@@ -92,7 +101,6 @@ export function createRuntimeFallbackHook(
 
     if (event.type === "message.updated") {
       if (!config.enabled) return
-      const props = event.properties as Record<string, unknown> | undefined
       await messageUpdateHandler(props)
       return
     }

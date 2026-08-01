@@ -11,6 +11,7 @@ import { SessionCategoryRegistry } from "../../shared/session-category-registry"
 import {
   _resetForTesting as resetClaudeCodeSessionState,
   subagentSessions,
+  syncTaskSessions,
 } from "../../features/claude-code-session-state"
 import {
   releaseAllPromptAsyncReservationsForTesting,
@@ -140,6 +141,45 @@ describe("runtime-fallback", () => {
   }
 
   describe("session.error handling", () => {
+    test("#given a synchronous subagent #when a retryable session error arrives #then runtime fallback leaves retry ownership to the task runner", async () => {
+      // given
+      const promptCalls: unknown[] = []
+      const sessionID = "test-sync-subagent-error"
+      const hook = createRuntimeFallbackHook(createMockPluginInput({
+        session: {
+          promptAsync: async (input) => {
+            promptCalls.push(input)
+            return {}
+          },
+        },
+      }), {
+        config: createMockConfig({ notify_on_fallback: false }),
+        pluginConfig: createMockPluginConfigWithCategoryFallback(["openai/gpt-5.4"]),
+      })
+      SessionCategoryRegistry.register(sessionID, "test")
+      syncTaskSessions.add(sessionID)
+
+      // when
+      await hook.event({
+        event: {
+          type: "session.created",
+          properties: { info: { id: sessionID, model: "openai/gpt-5.6-sol" } },
+        },
+      })
+      await hook.event({
+        event: {
+          type: "session.error",
+          properties: {
+            sessionID,
+            error: { statusCode: 503, message: "Our servers are currently overloaded." },
+          },
+        },
+      })
+
+      // then
+      expect(promptCalls).toEqual([])
+    })
+
     test("should detect retryable error with status code 429", async () => {
       const hook = createRuntimeFallbackHook(createMockPluginInput(), { config: createMockConfig() })
       const sessionID = "test-session-123"
