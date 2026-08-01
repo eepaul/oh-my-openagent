@@ -4,6 +4,11 @@ import type { AutoRetryHelpers } from "./auto-retry"
 import { createFallbackState } from "./fallback-state"
 import { createEventHandler } from "./event-handler"
 import { SessionCategoryRegistry } from "../../shared/session-category-registry"
+import {
+  _resetForTesting,
+  syncSubagentSessions,
+  syncTaskSessions,
+} from "../../features/claude-code-session-state"
 
 function createContext(): RuntimeFallbackPluginInput {
   return {
@@ -71,6 +76,95 @@ function createHelpers(deps: HookDeps, abortCalls: string[], clearCalls: string[
 describe("createEventHandler", () => {
   afterEach(() => {
     SessionCategoryRegistry.clear()
+    _resetForTesting()
+  })
+
+  it("#given a synchronous subagent session #when a retryable session.error fires #then runtime fallback does not dispatch a retry", async () => {
+    // given
+    const sessionID = "session-sync-task-error"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: ["openai/gpt-5.4"],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    syncTaskSessions.add(sessionID)
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.6-sol"))
+    const dispatchedModels: string[] = []
+    const helpers = createHelpers(deps, [], [])
+    helpers.autoRetryWithFallback = async (_sessionID: string, model: string) => {
+      dispatchedModels.push(model)
+      return { accepted: true, status: "dispatched" }
+    }
+    const handler = createEventHandler(deps, helpers)
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "openai",
+          modelID: "gpt-5.6-sol",
+          error: { name: "AI_APICallError", message: "Our servers are currently overloaded." },
+        },
+      },
+    })
+
+    // then
+    expect(dispatchedModels).toEqual([])
+  })
+
+  it("#given a non-task synchronous subagent session #when a retryable session.error fires #then runtime fallback remains available", async () => {
+    // given
+    const sessionID = "session-call-omo-error"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: ["openai/gpt-5.4"],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    syncSubagentSessions.add(sessionID)
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.6-sol"))
+    const dispatchedModels: string[] = []
+    const helpers = createHelpers(deps, [], [])
+    helpers.autoRetryWithFallback = async (_sessionID: string, model: string) => {
+      dispatchedModels.push(model)
+      return { accepted: true, status: "dispatched" }
+    }
+    const handler = createEventHandler(deps, helpers)
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "openai",
+          modelID: "gpt-5.6-sol",
+          error: { name: "AI_APICallError", message: "Our servers are currently overloaded." },
+        },
+      },
+    })
+
+    // then
+    expect(dispatchedModels).toEqual(["openai/gpt-5.4"])
   })
 
   it("#given a session retry dedupe key #when session.stop fires #then the retry dedupe key is cleared", async () => {

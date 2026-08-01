@@ -11,6 +11,7 @@ import { resolveFallbackBootstrapModel } from "./fallback-bootstrap-model"
 import { dispatchFallbackRetry } from "./fallback-retry-dispatcher"
 import { createSessionStatusHandler } from "./session-status-handler"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
+import { isSyncTaskFallbackOwned } from "../../features/claude-code-session-state"
 import { normalizeModelToCanonicalString } from "./normalize-model"
 
 function isRuntimeFallbackRecord(value: unknown): value is Record<string, unknown> {
@@ -176,6 +177,8 @@ export function createEventHandler(deps: HookDeps, helpers: AutoRetryHelpers) {
       log(`[${HOOK_NAME}] session.error without sessionID, skipping`)
       return
     }
+
+    if (isSyncTaskFallbackOwned(sessionID)) return
 
     const resolvedAgent = await helpers.resolveAgentForSessionFromContext(sessionID, agent)
 
