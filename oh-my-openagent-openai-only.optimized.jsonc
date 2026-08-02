@@ -1,24 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
-  "runtime_fallback": {
-    "enabled": true,
-    "retry_on_errors": [
-      429,
-      500,
-      502,
-      503,
-      504
-    ],
-    "timeout_seconds": 60,
-    "cooldown_seconds": 60,
-    "max_fallback_attempts": 3,
-    "notify_on_fallback": true
-  },
-  "background_task": {
-    "providerConcurrency": {
-      "openai": 10
-    }
-  },
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
   "agents": {
     "sisyphus": {
       "model": "openai/gpt-5.6-sol",
@@ -33,25 +14,27 @@
       "reasoning": "xhigh"
     },
     "librarian": {
-      "model": "openai/gpt-5.6-luna-fast",
-      "fallback_models": [
+      "models": [
+        "openai/gpt-5.6-luna-fast",
         {
           "model": "openai/gpt-5.4-nano"
         }
       ]
     },
     "explore": {
-      "model": "openai/gpt-5.6-luna-fast",
-      "fallback_models": [
+      "models": [
+        "openai/gpt-5.6-luna-fast",
         {
           "model": "openai/gpt-5.4-nano"
         }
       ]
     },
     "multimodal-looker": {
-      "model": "openai/gpt-5.6-sol",
-      "reasoning": "low",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "low"
+        },
         {
           "model": "openai/gpt-5-nano"
         }
@@ -66,9 +49,11 @@
       "reasoning": "high"
     },
     "momus": {
-      "model": "openai/gpt-5.6-terra",
-      "reasoning": "high",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "openai/gpt-5.6-terra",
+          "reasoning": "high"
+        },
         {
           "model": "openai/gpt-5.6-sol",
           "reasoning": "xhigh"
@@ -148,5 +133,30 @@
         }
       ]
     }
-  }
+  },
+  "[opencode]": {
+    "runtime_fallback": {
+      "enabled": true,
+      "retry_on_errors": [
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "timeout_seconds": 60,
+      "cooldown_seconds": 60,
+      "max_fallback_attempts": 3,
+      "notify_on_fallback": true
+    },
+    "background_task": {
+      "providerConcurrency": {
+        "openai": 10
+      }
+    }
+  },
+  "_migrations": [
+    "2026-07-opencode-config-unification",
+    "2026-08-reasoning-unification"
+  ]
 }
