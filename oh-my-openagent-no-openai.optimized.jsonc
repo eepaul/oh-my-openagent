@@ -1,0 +1,191 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
+  "agents": {
+    "sisyphus": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "oracle": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "librarian": {
+      "model": "anthropic/claude-haiku-4-5"
+    },
+    "explore": {
+      "model": "anthropic/claude-haiku-4-5"
+    },
+    "multimodal-looker": {
+      "model": "kimi-for-coding/k3"
+    },
+    "prometheus": {
+      "models": [
+        {
+          "model": "anthropic/claude-fable-5",
+          "reasoning": "xhigh"
+        },
+        {
+          "model": "kimi-for-coding/k3",
+          "reasoning": "max"
+        }
+      ]
+    },
+    "metis": {
+      "models": [
+        {
+          "model": "anthropic/claude-fable-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "anthropic/claude-sonnet-5"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "momus": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "atlas": {
+      "models": [
+        "anthropic/claude-sonnet-5",
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "sisyphus-junior": {
+      "models": [
+        "anthropic/claude-sonnet-5",
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    }
+  },
+  "categories": {
+    "visual-engineering": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "ultrabrain": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "deep": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "artistry": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "quick": {
+      "model": "anthropic/claude-haiku-4-5"
+    },
+    "unspecified-low": {
+      "models": [
+        "anthropic/claude-sonnet-5",
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "unspecified-high": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3"
+        }
+      ]
+    },
+    "writing": {
+      "models": [
+        "kimi-for-coding/k3",
+        {
+          "model": "anthropic/claude-sonnet-5"
+        }
+      ]
+    }
+  },
+  "[opencode]": {
+    "runtime_fallback": {
+      "enabled": true,
+      "retry_on_errors": [
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "timeout_seconds": 60,
+      "cooldown_seconds": 60,
+      "max_fallback_attempts": 3,
+      "notify_on_fallback": true
+    },
+    "background_task": {
+      "providerConcurrency": {
+        "anthropic": 10,
+        "kimi-for-coding": 4
+      }
+    }
+  },
+  "_migrations": [
+    "2026-07-opencode-config-unification",
+    "2026-08-reasoning-unification"
+  ]
+}
