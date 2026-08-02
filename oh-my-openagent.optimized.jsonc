@@ -1,31 +1,12 @@
 {
-  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
-  "runtime_fallback": {
-    "enabled": true,
-    "retry_on_errors": [
-      429,
-      500,
-      502,
-      503,
-      504
-    ],
-    "timeout_seconds": 60,
-    "cooldown_seconds": 60,
-    "max_fallback_attempts": 3,
-    "notify_on_fallback": true
-  },
-  "background_task": {
-    "providerConcurrency": {
-      "anthropic": 10,
-      "openai": 10,
-      "kimi-for-coding": 4
-    }
-  },
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/omo.schema.json",
   "agents": {
     "sisyphus": {
-      "model": "anthropic/claude-opus-5",
-      "reasoning": "max",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
         {
           "model": "kimi-for-coding/k3"
         },
@@ -40,9 +21,11 @@
       "reasoning": "medium"
     },
     "oracle": {
-      "model": "openai/gpt-5.6-sol",
-      "reasoning": "xhigh",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "xhigh"
+        },
         {
           "model": "anthropic/claude-opus-5",
           "reasoning": "max"
@@ -50,8 +33,8 @@
       ]
     },
     "librarian": {
-      "model": "openai/gpt-5.6-luna-fast",
-      "fallback_models": [
+      "models": [
+        "openai/gpt-5.6-luna-fast",
         {
           "model": "anthropic/claude-haiku-4-5"
         },
@@ -61,8 +44,8 @@
       ]
     },
     "explore": {
-      "model": "openai/gpt-5.6-luna-fast",
-      "fallback_models": [
+      "models": [
+        "openai/gpt-5.6-luna-fast",
         {
           "model": "anthropic/claude-haiku-4-5"
         },
@@ -72,9 +55,11 @@
       ]
     },
     "multimodal-looker": {
-      "model": "openai/gpt-5.6-sol",
-      "reasoning": "low",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "low"
+        },
         {
           "model": "kimi-for-coding/k3"
         },
@@ -91,9 +76,11 @@
       "model": "anthropic/claude-opus-5"
     },
     "momus": {
-      "model": "openai/gpt-5.6-terra",
-      "reasoning": "high",
-      "fallback_models": [
+      "models": [
+        {
+          "model": "openai/gpt-5.6-terra",
+          "reasoning": "high"
+        },
         {
           "model": "openai/gpt-5.6-sol",
           "reasoning": "xhigh"
@@ -105,8 +92,8 @@
       ]
     },
     "atlas": {
-      "model": "anthropic/claude-sonnet-5",
-      "fallback_models": [
+      "models": [
+        "anthropic/claude-sonnet-5",
         {
           "model": "kimi-for-coding/k3"
         },
@@ -117,8 +104,8 @@
       ]
     },
     "sisyphus-junior": {
-      "model": "anthropic/claude-sonnet-5",
-      "fallback_models": [
+      "models": [
+        "anthropic/claude-sonnet-5",
         {
           "model": "kimi-for-coding/k3"
         },
@@ -129,7 +116,7 @@
       ]
     },
     "review-gpt-agent": {
-      "fallback_models": [
+      "models": [
         {
           "model": "kimi-for-coding/k3",
           "reasoning": "max"
@@ -137,7 +124,7 @@
       ]
     },
     "review-claude-agent": {
-      "fallback_models": [
+      "models": [
         {
           "model": "kimi-for-coding/k3",
           "reasoning": "max"
@@ -245,5 +232,32 @@
         }
       ]
     }
-  }
+  },
+  "[opencode]": {
+    "runtime_fallback": {
+      "enabled": true,
+      "retry_on_errors": [
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "timeout_seconds": 60,
+      "cooldown_seconds": 60,
+      "max_fallback_attempts": 3,
+      "notify_on_fallback": true
+    },
+    "background_task": {
+      "providerConcurrency": {
+        "anthropic": 10,
+        "openai": 10,
+        "kimi-for-coding": 4
+      }
+    }
+  },
+  "_migrations": [
+    "2026-07-opencode-config-unification",
+    "2026-08-reasoning-unification"
+  ]
 }
