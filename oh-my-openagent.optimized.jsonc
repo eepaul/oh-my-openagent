@@ -118,6 +118,10 @@
     "review-gpt-agent": {
       "models": [
         {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "xhigh"
+        },
+        {
           "model": "kimi-for-coding/k3",
           "reasoning": "max"
         }
@@ -125,6 +129,10 @@
     },
     "review-claude-agent": {
       "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
         {
           "model": "kimi-for-coding/k3",
           "reasoning": "max"
