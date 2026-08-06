@@ -67,6 +67,14 @@
     "sisyphus-junior": {
       "model": "openai/gpt-5.6-sol",
       "reasoning": "medium"
+    },
+    "review-gpt-agent": {
+      "models": [
+        {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "xhigh"
+        }
+      ]
     }
   },
   "categories": {

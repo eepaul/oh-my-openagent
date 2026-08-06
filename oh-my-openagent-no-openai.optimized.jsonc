@@ -84,6 +84,18 @@
           "model": "kimi-for-coding/k3"
         }
       ]
+    },
+    "review-claude-agent": {
+      "models": [
+        {
+          "model": "anthropic/claude-opus-5",
+          "reasoning": "max"
+        },
+        {
+          "model": "kimi-for-coding/k3",
+          "reasoning": "max"
+        }
+      ]
     }
   },
   "categories": {

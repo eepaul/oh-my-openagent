@@ -105,6 +105,10 @@
     "review-gpt-agent": {
       "models": [
         {
+          "model": "openai/gpt-5.6-sol",
+          "reasoning": "xhigh"
+        },
+        {
           "model": "kimi-for-coding/k3",
           "reasoning": "max"
         }
