@@ -33,7 +33,7 @@ function validateJsonc(
 }
 
 describe("validatePluginConfig canonical agent model chains", () => {
-  it("#given the root OpenAI-only config #when validating #then adapts all eleven agents", () => {
+  it("#given the root OpenAI-only config #when validating #then adapts all twelve agents", () => {
     const result = validateJsonc("openai-only", readFileSync(OPENAI_ONLY_CONFIG, "utf-8"))
 
     expect(result.valid).toBe(true)
@@ -64,6 +64,7 @@ describe("validatePluginConfig canonical agent model chains", () => {
       },
       atlas: { model: "openai/gpt-5.6-sol", reasoning: "medium" },
       "sisyphus-junior": { model: "openai/gpt-5.6-sol", reasoning: "medium" },
+      "review-gpt-agent": { model: "openai/gpt-5.6-sol", reasoning: "xhigh" },
     })
   })
 
