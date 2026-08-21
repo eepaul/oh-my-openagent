@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/stop-continuation` no longer deletes `.omo/boulder.json`; it archives to `boulder.json.stopped-<timestamp>` and reports the archive result.
 - BOULDER/TODO continuation recognizes plans fully blocked on `[~]`, sends one passive reminder per waiting episode instead of repeatedly forcing continuation, and resumes normal continuation when the block clears.
 
+### Removed
+
+- The `tool-pair-repair-injector` transform hook and the synthetic-message half of the `tool_pair_mismatch` recovery strategy. The hook injected `tool_result` parts, a type that is not in OpenCode's `Part` union, so `MessageV2.toModelMessagesEffect` discarded them before the request was built and no recovered tool output ever reached the provider. The only part that survived conversion was a text turn claiming the results had been recovered, which was not true. `tool-pair-validator` already prevents the underlying orphan by settling non-terminal `tool` parts into a terminal error state, which OpenCode expands into a paired `tool_use` + `tool_result`. Reactive recovery for `tool_pair_mismatch` is unchanged: the error still triggers a summarize retry. One behavior change: repeated mismatches no longer short-circuit on a per-`messageIndex`/`toolUseID` idempotency set, so each one runs the summarize retry, still bounded by `RETRY_CONFIG.maxAttempts`.
+
 ## [4.14.0] - 2026-06-29
 
 ### Added

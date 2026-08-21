@@ -38,7 +38,6 @@ export function clearSessionState(
   autoCompactState.retryStateBySession.delete(sessionID)
   autoCompactState.truncateStateBySession.delete(sessionID)
   autoCompactState.emptyContentAttemptBySession.delete(sessionID)
-  autoCompactState.toolPairRepairBySession.delete(sessionID)
   autoCompactState.compactionInProgress.delete(sessionID)
 }
 

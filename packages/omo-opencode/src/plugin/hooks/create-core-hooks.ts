@@ -44,7 +44,6 @@ export function createCoreHooks(args: {
     pluginConfig,
     isHookEnabled: (name) => isHookEnabled(name as HookName),
     safeHookEnabled,
-    getAutoCompactState: session.anthropicContextWindowLimitRecovery?.getAutoCompactState,
     monitorManager,
   })
 

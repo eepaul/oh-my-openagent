@@ -34,7 +34,6 @@ type MessagesTransformHooks = {
   contextInjectorMessagesTransform?: CreatedHooks["contextInjectorMessagesTransform"]
   teamModeStatusInjector?: CreatedHooks["teamModeStatusInjector"]
   teamMailboxInjector?: CreatedHooks["teamMailboxInjector"]
-  toolPairRepairInjector?: CreatedHooks["toolPairRepairInjector"]
   toolPairValidator?: CreatedHooks["toolPairValidator"]
   monitorStatusInjector?: CreatedHooks["monitorStatusInjector"]
   categorySkillReminder?: CreatedHooks["categorySkillReminder"]
@@ -60,7 +59,6 @@ const MESSAGES_TRANSFORM_HOOKS = [
   { key: "contextInjectorMessagesTransform", name: "contextInjectorMessagesTransform" },
   { key: "teamModeStatusInjector", name: "teamModeStatusInjector" },
   { key: "teamMailboxInjector", name: "teamMailboxInjector" },
-  { key: "toolPairRepairInjector", name: "toolPairRepairInjector" },
   { key: "toolPairValidator", name: "toolPairValidator" },
   { key: "monitorStatusInjector", name: "monitorStatusInjector" },
   { key: "categorySkillReminder", name: "categorySkillReminder" },

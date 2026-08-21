@@ -1,0 +1,27 @@
+[2026-08-21T05:40:51.468Z] [oh-my-openagent] ENTRY - plugin loading {"directory":"/tmp/omo-qa-drop-injector.JqnwjC/project"}
+[2026-08-21T05:40:51.493Z] [config-migration] startup completed {"journalResumed":false,"migratedFrom":[],"skippedConflictCount":0}
+[2026-08-21T05:40:51.532Z] lsp-daemon stale-version sweep skipped: current lsp-daemon version is unknown 
+[2026-08-21T05:40:51.568Z] [live-server-route] registered {"directory":"/tmp/omo-qa-drop-injector.JqnwjC/project","hasServerUrl":true,"registrationCount":1}
+[2026-08-21T05:40:51.649Z] [tmux-session-manager] initialized {"configEnabled":false,"tmuxConfig":{"enabled":false,"layout":"main-vertical","main_pane_size":60,"main_pane_min_width":120,"agent_pane_min_width":40,"isolation":"inline"},"projectDirectory":"/tmp/omo-qa-drop-injector.JqnwjC/project","serverUrl":"http://localhost:4096/","sourcePaneId":"%70"}
+[2026-08-21T05:40:51.987Z] [tool-registry] Built tool registry {"totalTools":14,"teamModeEnabled":false,"teamToolCount":0}
+[2026-08-21T05:40:54.631Z] directory-agents-injector auto-disabled due to native OpenCode support {"currentVersion":"1.18.19","nativeVersion":"1.1.37"}
+[2026-08-21T05:40:54.958Z] [agent-source-loader] Agent sources loaded {"user":0,"project":0,"opencodeGlobal":0,"opencodeProject":0,"plugin":0,"agentDefinitions":0,"opencodeConfig":0,"config":0}
+[2026-08-21T05:40:54.959Z] [connected-providers-cache] Cache file not found {"cacheFile":"/tmp/omo-qa-drop-injector.JqnwjC/cache/oh-my-opencode/connected-providers.json"}
+[2026-08-21T05:40:54.960Z] [fetchAvailableModels] CALLED {"connectedProvidersUnknown":true}
+[2026-08-21T05:40:54.960Z] [fetchAvailableModels] connected providers unknown, returning empty set for fallback resolution 
+[2026-08-21T05:40:54.994Z] [agent-registration] Agent skipped: model resolution returned no result {"agent":"atlas"}
+[2026-08-21T05:40:54.996Z] [fetchAvailableModels] CALLED {"connectedProvidersUnknown":true}
+[2026-08-21T05:40:54.996Z] [fetchAvailableModels] connected providers unknown, returning empty set for fallback resolution 
+[2026-08-21T05:40:55.000Z] [config-handler] agents loaded {"agentKeys":["Sisyphus - ultraworker","Hephaestus - Deep Agent","Prometheus - Plan Builder","build","explore","librarian","Metis - Plan Consultant","Momus - Plan Critic","multimodal-looker","oracle","plan","Sisyphus-Junior"]}
+[2026-08-21T05:40:55.126Z] [config-handler] config handler applied {"agentCount":12,"commandCount":16}
+[2026-08-21T05:40:54.954Z] Loaded 0 plugins with 0 commands, 0 skills, 0 agents, 0 MCP servers 
+[2026-08-21T05:40:55.909Z] [codegraph-bootstrap] CodeGraph project excluded; skipping bootstrap {"matchedRoot":"/tmp","projectRoot":"/tmp/omo-qa-drop-injector.JqnwjC/project","reason":"tmp-root"}
+[2026-08-21T05:40:59.066Z] [connected-providers-cache] Provider-models cache file not found {"cacheFile":"/tmp/omo-qa-drop-injector.JqnwjC/cache/oh-my-opencode/provider-models.json"}
+[2026-08-21T05:41:03.205Z] [connected-providers-cache] Fetched connected providers {"count":5,"providers":["anthropic","openai","opencode-go","opencode","kimi-for-coding"]}
+[2026-08-21T05:41:03.206Z] [connected-providers-cache] Cache written {"count":5,"updatedAt":"2026-08-21T05:41:03.205Z"}
+[2026-08-21T05:41:03.211Z] [connected-providers-cache] Extracted models from provider list {"providerCount":5,"totalModels":114}
+[2026-08-21T05:41:03.214Z] [connected-providers-cache] Provider-models cache written {"providerCount":5,"updatedAt":"2026-08-21T05:41:03.212Z"}
+[2026-08-21T05:41:03.214Z] [auto-update-checker] Connected providers cache created on first run 
+[2026-08-21T05:41:04.756Z] [model-capabilities-cache] Cache written {"modelCount":3319,"generatedAt":"2026-08-21T05:41:04.709Z"}
+[2026-08-21T05:41:04.757Z] [auto-update-checker] Plugin not found in config 
+[2026-08-21T05:41:08.842Z] [oh-my-openagent] Downloading comment-checker binary... 
