@@ -198,6 +198,7 @@
   },
   "_migrations": [
     "2026-07-opencode-config-unification",
-    "2026-08-reasoning-unification"
+    "2026-08-reasoning-unification",
+    "2026-07-codex-config-jsonc"
   ]
 }
