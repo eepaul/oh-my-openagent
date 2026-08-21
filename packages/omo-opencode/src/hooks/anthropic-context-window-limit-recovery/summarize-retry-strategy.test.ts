@@ -18,7 +18,6 @@ function createAutoCompactState(): AutoCompactState {
     truncateStateBySession: new Map(),
     emptyContentAttemptBySession: new Map(),
     compactionInProgress: new Set<string>(),
-    toolPairRepairBySession: new Map<string, Set<string>>(),
   }
 }
 

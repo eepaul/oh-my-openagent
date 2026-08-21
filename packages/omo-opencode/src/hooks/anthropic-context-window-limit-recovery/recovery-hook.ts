@@ -32,7 +32,6 @@ function createRecoveryState(): AutoCompactState {
     retryTimerBySession: new Map(),
     truncateStateBySession: new Map(),
     emptyContentAttemptBySession: new Map(),
-    toolPairRepairBySession: new Map<string, Set<string>>(),
     compactionInProgress: new Set<string>(),
   }
 }
@@ -65,7 +64,6 @@ export function createAnthropicContextWindowLimitRecoveryHook(
         clearSessionTimeout(pendingCompactionTimeoutBySession, sessionID)
 
         clearSessionState(autoCompactState, sessionID)
-        autoCompactState.toolPairRepairMessagesBySession?.delete(sessionID)
       }
       return
     }
@@ -75,7 +73,6 @@ export function createAnthropicContextWindowLimitRecoveryHook(
       if (sessionID) {
         clearSessionTimeout(pendingCompactionTimeoutBySession, sessionID)
         clearSessionState(autoCompactState, sessionID)
-        autoCompactState.toolPairRepairMessagesBySession?.delete(sessionID)
       }
       return
     }

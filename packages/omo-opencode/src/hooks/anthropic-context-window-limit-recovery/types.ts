@@ -22,33 +22,6 @@ export interface TruncateState {
   lastTruncatedPartId?: string
 }
 
-export interface ToolPairRepairTextContent {
-  type: "text"
-  text: string
-}
-
-export interface ToolPairRepairToolResultPart {
-  type: "tool_result"
-  toolUseId: string
-  tool_use_id: string
-  isError: false
-  content: ToolPairRepairTextContent[]
-}
-
-export interface ToolPairRepairContinuationPart {
-  type: "text"
-  text: string
-  synthetic: true
-}
-
-export interface ToolPairRepairSyntheticMessage {
-  info: {
-    role: "user"
-    sessionID: string
-  }
-  parts: Array<ToolPairRepairToolResultPart | ToolPairRepairContinuationPart>
-}
-
 export interface AutoCompactState {
   pendingCompact: Set<string>
   errorDataBySession: Map<string, ParsedTokenLimitError>
@@ -56,8 +29,6 @@ export interface AutoCompactState {
   retryTimerBySession: Map<string, ReturnType<typeof setTimeout>>
   truncateStateBySession: Map<string, TruncateState>
   emptyContentAttemptBySession: Map<string, number>
-  toolPairRepairBySession: Map<string, Set<string>>
-  toolPairRepairMessagesBySession?: Map<string, ToolPairRepairSyntheticMessage[]>
   compactionInProgress: Set<string>
 }
 

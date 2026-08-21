@@ -20,8 +20,7 @@ function isAutoCompactState(value: unknown): value is AutoCompactState {
     "retryTimerBySession" in value &&
     "truncateStateBySession" in value &&
     "emptyContentAttemptBySession" in value &&
-    "compactionInProgress" in value &&
-    "toolPairRepairBySession" in value
+    "compactionInProgress" in value
   )
 }
 
