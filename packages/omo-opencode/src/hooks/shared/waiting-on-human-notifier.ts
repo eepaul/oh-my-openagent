@@ -36,7 +36,7 @@ export type WaitingOnHumanNotificationInput = {
   readonly planPath: string
   readonly planName: string
   readonly blockedCount: number
-  readonly preDispatchGuard: () => boolean
+  readonly shouldDispatch: () => boolean
   readonly settleMs?: number
 }
 
@@ -65,7 +65,7 @@ function shouldKeepWaitingEpisodeReservation(result: InternalPromptDispatchResul
     case "active":
     case "reserved":
     case "unavailable":
-    case "guard_rejected":
+    case "cancelled":
       return false
     default: {
       const unreachable: never = result
@@ -142,7 +142,7 @@ export function createWaitingOnHumanNotifier(
         sessionID: input.sessionID,
         source: WAITING_ON_HUMAN_SOURCE,
         queueBehavior: "defer",
-        preDispatchGuard: input.preDispatchGuard,
+        shouldDispatch: input.shouldDispatch,
         ...(input.settleMs === undefined ? {} : { settleMs: input.settleMs }),
         input: {
           path: { id: input.sessionID },

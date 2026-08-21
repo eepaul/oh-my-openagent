@@ -95,7 +95,8 @@ function isObjectPathTypeError(error: unknown): boolean {
   const message = error instanceof Error
     ? error.message
     : typeof error === "string" ? error : ""
-  return message.includes('The "path" property must be of type string') && message.includes("got object")
+  return message.includes('The "path" property must be of type string')
+    && (message.includes("got object") || message.includes("got undefined"))
 }
 
 async function dispatchWithPathCompatibility<TInput>(
@@ -237,7 +238,7 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
       dispatchTimeoutMs,
       checkStatus: args.checkStatus !== false,
       checkToolState: args.checkToolState !== false,
-      ...(args.preDispatchGuard === undefined ? {} : { preDispatchGuard: args.preDispatchGuard }),
+      shouldDispatch: args.shouldDispatch,
       dispatch: (dispatchInput) => dispatchWithPathCompatibility(dispatch, dispatchInput),
     })
     if (
@@ -272,7 +273,7 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
       queueRetryMs,
       checkStatus: args.checkStatus !== false,
       checkToolState: args.checkToolState !== false,
-      ...(args.preDispatchGuard === undefined ? {} : { preDispatchGuard: args.preDispatchGuard }),
+      shouldDispatch: args.shouldDispatch,
       dispatch: async (_dispatchInput: unknown) => dispatchWithPathCompatibility(dispatch, input),
     })
   }
@@ -295,7 +296,7 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
     dispatchTimeoutMs,
     checkStatus: args.checkStatus !== false,
     checkToolState: args.checkToolState !== false,
-    ...(args.preDispatchGuard === undefined ? {} : { preDispatchGuard: args.preDispatchGuard }),
+    shouldDispatch: args.shouldDispatch,
     dispatch: (dispatchInput) => dispatchWithPathCompatibility(dispatch, dispatchInput),
   })
   if (

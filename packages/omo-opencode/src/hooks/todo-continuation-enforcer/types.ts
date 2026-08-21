@@ -43,6 +43,7 @@ export interface SessionState {
   isRecovering?: boolean
   wasCancelled?: boolean
   tokenLimitDetected?: boolean
+  unrecoverableErrorDetected?: boolean
   countdownStartedAt?: number
   abortDetectedAt?: number
   lastIncompleteCount?: number

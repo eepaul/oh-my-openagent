@@ -6,6 +6,7 @@ import {
   resolveInheritedPromptTools,
 } from "../../shared"
 import { isTokenLimitError } from "./token-limit-detection"
+import { isUnrecoverableRequestError } from "./unrecoverable-request-error"
 import { CONTINUATION_COOLDOWN_MS, HOOK_NAME } from "./constants"
 import type { ToolPermission } from "../../features/hook-message-injector"
 import { log } from "../../shared/logger"
@@ -51,7 +52,7 @@ export async function dispatchContinuationPrompt(input: {
       settleMs: 0,
       queueBehavior: "defer",
       semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
-      preDispatchGuard: () =>
+      shouldDispatch: () =>
         input.isContinuationStopped?.(input.sessionID) !== true
         && !isBoulderSessionWaitingOnHuman(input.ctx.directory, input.sessionID),
       input: {
@@ -112,6 +113,9 @@ export async function dispatchContinuationPrompt(input: {
       if (isTokenLimitError(errorObj)) {
         input.injectionState.tokenLimitDetected = true
         log(`[${HOOK_NAME}] Token limit error detected during injection, stopping continuation`, { sessionID: input.sessionID })
+      } else if (isUnrecoverableRequestError(error)) {
+        input.injectionState.unrecoverableErrorDetected = true
+        log(`[${HOOK_NAME}] Non-retryable request error detected during injection, stopping continuation`, { sessionID: input.sessionID })
       }
     }
   }

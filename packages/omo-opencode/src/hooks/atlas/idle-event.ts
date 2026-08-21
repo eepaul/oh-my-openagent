@@ -88,6 +88,21 @@ export async function handleAtlasSessionIdle(input: {
     return
   }
 
+  if (sessionState.waitingForFinalWaveApproval) {
+    log(`[${HOOK_NAME}] Skipped: waiting for explicit final-wave approval`, { sessionID })
+    return
+  }
+
+  if (waitingWorkId && isAwaitingFinalWaveApproval(ctx.directory, waitingWorkId, activePlanPath)) {
+    sessionState.waitingForFinalWaveApproval = true
+    log(`[${HOOK_NAME}] Skipped: awaiting durable final-wave approval`, {
+      sessionID,
+      workId: waitingWorkId,
+    })
+    return
+  }
+  sessionState.waitingForFinalWaveApproval = false
+
   if (progress.isComplete) {
     await handleCompletedBoulderIdle({ ctx, options, sessionID, sessionState, boulderState })
     return
@@ -117,18 +132,6 @@ export async function handleAtlasSessionIdle(input: {
 
   const now = Date.now()
   resetStallStateForPlanChange(sessionState, activePlanPath)
-
-  const finalWaveWorkId = boulderState.active_work_id
-    ?? getWorkForSession(ctx.directory, sessionID)?.work_id
-  if (finalWaveWorkId && isAwaitingFinalWaveApproval(ctx.directory, finalWaveWorkId, activePlanPath)) {
-    sessionState.waitingForFinalWaveApproval = true
-    log(`[${HOOK_NAME}] Skipped: awaiting durable final-wave approval`, {
-      sessionID,
-      workId: finalWaveWorkId,
-    })
-    return
-  }
-  sessionState.waitingForFinalWaveApproval = false
 
   if (sessionState.stalledContinuationReason) {
     log(`[${HOOK_NAME}] Skipped: boulder continuation stalled`, {

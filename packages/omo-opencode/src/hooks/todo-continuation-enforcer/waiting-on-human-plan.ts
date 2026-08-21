@@ -180,7 +180,7 @@ export async function notifyWaitingOnHuman(input: {
     planPath: input.waitingPlan.planPath,
     planName: input.waitingPlan.planName,
     blockedCount: input.waitingPlan.blockedCount,
-    preDispatchGuard: () =>
+    shouldDispatch: () =>
       input.isContinuationStopped?.(input.sessionID) !== true
       && isBoulderSessionWaitingOnHuman(input.ctx.directory, input.sessionID),
   })

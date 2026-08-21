@@ -1,28 +1,83 @@
 import type { HookDeps } from "./types"
+import type { RuntimeFallbackTimeout } from "./types"
+import { parseModelString } from "@oh-my-opencode/model-core"
 import { HOOK_NAME } from "./constants"
 import { log } from "../../shared/logger"
-import { parseModelString } from "../../shared/model-string-parser"
-import { areRuntimeModelsEquivalent, createFallbackState, isModelInCooldown } from "./fallback-state"
+import {
+  areRuntimeModelsEquivalent,
+  createFallbackState,
+  isModelInCooldown,
+  stringifyRuntimeModelWithVariant,
+} from "./fallback-state"
+import { buildRetryModelPayload } from "./retry-model-payload"
+import { resolveRuntimeModelSettings } from "./runtime-model-settings"
+import { getSessionAgent } from "../../features/claude-code-session-state"
 
-function applyModelOverride(
-  message: { model?: { providerID: string; modelID: string }; variant?: string },
-  activeModel: string,
-): void {
-  const parsed = parseModelString(activeModel)
-  if (!parsed) return
-  message.model = { providerID: parsed.providerID, modelID: parsed.modelID }
-  if (parsed.variant !== undefined) {
-    message.variant = parsed.variant
-  } else {
-    delete message.variant
-  }
+declare function clearTimeout(timeout: RuntimeFallbackTimeout): void
+
+function matchesActiveRuntimeModel(requested: string, candidate: string | undefined): boolean {
+  if (requested === candidate) return true
+  // OpenCode reports the active model without its variant suffix on some turns. That
+  // narrower spelling is the same model, not a manual switch. A requested model that
+  // does carry a variant is compared strictly, so a variant-only change still resets.
+  if (parseModelString(requested)?.variant !== undefined) return false
+  return areRuntimeModelsEquivalent(requested, candidate)
 }
 
 export function createChatMessageHandler(deps: HookDeps) {
-  const { config, sessionStates, sessionLastAccess } = deps
+  const {
+    config,
+    sessionStates,
+    sessionLastAccess,
+    sessionAwaitingFallbackResult,
+    sessionFallbackTimeouts,
+    sessionStatusRetryKeys,
+    sessionRetryInFlight,
+  } = deps
+
+  function clearFallbackWatchdog(sessionID: string): void {
+    sessionAwaitingFallbackResult.delete(sessionID)
+    const timer = sessionFallbackTimeouts.get(sessionID)
+    if (timer) {
+      clearTimeout(timer)
+      sessionFallbackTimeouts.delete(sessionID)
+    }
+  }
+
+  function clearModelLessRetryKeys(sessionID: string): void {
+    const retryKeys = sessionStatusRetryKeys.get(sessionID)
+    if (!retryKeys) return
+
+    for (const retryKey of retryKeys) {
+      if (retryKey.startsWith("unknown:")) {
+        retryKeys.delete(retryKey)
+      }
+    }
+    if (retryKeys.size === 0) {
+      sessionStatusRetryKeys.delete(sessionID)
+    }
+  }
+
+  function applyRuntimeModel(
+    message: { model?: { providerID: string; modelID: string }; variant?: string },
+    runtimeModel: string,
+  ): void {
+    const parsedModel = parseModelString(runtimeModel)
+    if (!parsedModel) return
+
+    message.model = {
+      providerID: parsedModel.providerID,
+      modelID: parsedModel.modelID,
+    }
+    if (parsedModel.variant) {
+      message.variant = parsedModel.variant
+    } else {
+      delete message.variant
+    }
+  }
 
   return async (
-    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string } },
+    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string }; variant?: string },
     output: { message: { model?: { providerID: string; modelID: string }; variant?: string }; parts?: Array<{ type: string; text?: string }> }
   ) => {
     if (!config.enabled) return
@@ -34,27 +89,30 @@ export function createChatMessageHandler(deps: HookDeps) {
 
     sessionLastAccess.set(sessionID, Date.now())
 
-    const requestedModel = input.model
-      ? `${input.model.providerID}/${input.model.modelID}`
-      : undefined
+    const requestedModel = stringifyRuntimeModelWithVariant(
+      input.model,
+      output.message.variant ?? input.variant,
+    )
 
-    if (requestedModel) {
-      if (state.pendingFallbackModel && areRuntimeModelsEquivalent(state.pendingFallbackModel, requestedModel)) {
-        state.pendingFallbackModel = undefined
-        state.pendingFallbackPromptMayHaveBeenAccepted = false
-        return
-      }
+    if (requestedModel && matchesActiveRuntimeModel(requestedModel, state.pendingFallbackModel)) {
+      state.pendingFallbackModel = undefined
+      state.pendingFallbackPromptMayHaveBeenAccepted = false
+      clearModelLessRetryKeys(sessionID)
+      return
+    }
 
-      if (!areRuntimeModelsEquivalent(requestedModel, state.currentModel)) {
-        log(`[${HOOK_NAME}] Detected manual model change, resetting fallback state`, {
-          sessionID,
-          from: state.currentModel,
-          to: requestedModel,
-        })
-        state = createFallbackState(requestedModel)
-        sessionStates.set(sessionID, state)
-        return
-      }
+    if (requestedModel && !matchesActiveRuntimeModel(requestedModel, state.currentModel)) {
+      log(`[${HOOK_NAME}] Detected manual model change, resetting fallback state`, {
+        sessionID,
+        from: state.currentModel,
+        to: requestedModel,
+      })
+      state = createFallbackState(requestedModel)
+      sessionStates.set(sessionID, state)
+      clearFallbackWatchdog(sessionID)
+      sessionRetryInFlight.delete(sessionID)
+      sessionStatusRetryKeys.delete(sessionID)
+      return
     }
 
     if (
@@ -63,15 +121,20 @@ export function createChatMessageHandler(deps: HookDeps) {
       !state.pendingFallbackModel &&
       !isModelInCooldown(state.originalModel, state, config.cooldown_seconds)
     ) {
-      const activeModel = state.originalModel
+      const primaryPayload = buildRetryModelPayload(
+        state.originalModel,
+        resolveRuntimeModelSettings(sessionID, input.agent ?? getSessionAgent(sessionID), deps.pluginConfig),
+      )
+      const activeModel = primaryPayload
+        ? stringifyRuntimeModelWithVariant(primaryPayload.model, primaryPayload.variant) ?? state.originalModel
+        : state.originalModel
       log(`[${HOOK_NAME}] Restoring preferred primary model`, {
         sessionID,
         from: state.currentModel,
         to: activeModel,
       })
       sessionStates.set(sessionID, createFallbackState(activeModel))
-
-      applyModelOverride(output.message, activeModel)
+      applyRuntimeModel(output.message, activeModel)
       return
     }
 
@@ -85,8 +148,6 @@ export function createChatMessageHandler(deps: HookDeps) {
       to: activeModel,
     })
 
-    if (output.message && activeModel) {
-      applyModelOverride(output.message, activeModel)
-    }
+    if (output.message && activeModel) applyRuntimeModel(output.message, activeModel)
   }
 }

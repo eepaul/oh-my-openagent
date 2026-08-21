@@ -35,7 +35,7 @@ describe("createWaitingOnHumanNotifier gate race", () => {
       planPath: "/workspace/.omo/plans/plan.md",
       planName: "plan",
       blockedCount: 2,
-      preDispatchGuard: () => isWaiting,
+      shouldDispatch: () => isWaiting,
       settleMs: 0,
     }
 
@@ -49,7 +49,7 @@ describe("createWaitingOnHumanNotifier gate race", () => {
     const retriedResult = await notifier.maybeNotify(notification)
 
     // then
-    expect(rejectedResult).toEqual({ status: "guard_rejected" })
+    expect(rejectedResult).toEqual({ status: "cancelled" })
     expect(retriedResult?.status).toBe("dispatched")
     expect(promptCalls).toBe(1)
   })

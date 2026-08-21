@@ -1,6 +1,21 @@
 import type { AutoCompactState, ToolPairRepairSyntheticMessage } from "./types"
 import type { MessageWithParts, MessagesTransformHook, TransformPart } from "../tool-pair-validator/types"
-import { extractUniqueToolUseIDs, isRecord } from "../tool-pair-validator/tool-part-ids"
+import { findUnpairedToolParts, isRecord, toRecord } from "../tool-pair-validator/tool-part-ids"
+
+function getAssistantToolUseIDs(parts: TransformPart[]): Set<string> {
+  const toolUseIDs = new Set(findUnpairedToolParts(parts).map((part) => part.callID))
+  for (const part of parts) {
+    const record = toRecord(part)
+    if (record?.["type"] !== "tool_use") {
+      continue
+    }
+    const id = record["id"]
+    if (typeof id === "string" && id.length > 0) {
+      toolUseIDs.add(id)
+    }
+  }
+  return toolUseIDs
+}
 
 function getMessageRole(message: MessageWithParts): string | undefined {
   const info: unknown = message.info
@@ -64,7 +79,7 @@ function injectSyntheticMessages(
       continue
     }
 
-    const toolUseIDs = new Set(extractUniqueToolUseIDs(message.parts))
+    const toolUseIDs = getAssistantToolUseIDs(message.parts)
     pending.forEach((synthetic, index) => {
       if (consumed.has(index)) {
         return

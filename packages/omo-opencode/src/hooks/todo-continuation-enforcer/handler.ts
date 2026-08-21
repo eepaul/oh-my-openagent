@@ -15,6 +15,7 @@ import { handleSessionIdle } from "./idle-event"
 import { handleNonIdleEvent } from "./non-idle-events"
 import { isTokenLimitError } from "./token-limit-detection"
 import type { CountdownScheduler } from "./types"
+import { isUnrecoverableRequestError } from "./unrecoverable-request-error"
 import type { WaitingOnHumanNotifier } from "../shared/waiting-on-human-notifier"
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -103,6 +104,15 @@ export function createTodoContinuationHandler(args: {
         state.tokenLimitDetected = true
         shouldCancelCountdown = true
         log(`[${HOOK_NAME}] Token limit error detected via session.error`, { sessionID, errorName: error?.name, errorMessage: error?.message })
+      } else if (isUnrecoverableRequestError(props?.error)) {
+        const state = sessionStateStore.getState(sessionID)
+        state.unrecoverableErrorDetected = true
+        shouldCancelCountdown = true
+        log(`[${HOOK_NAME}] Non-retryable request error detected via session.error`, {
+          sessionID,
+          errorName: error?.name,
+          errorMessage: error?.message,
+        })
       }
 
       if (shouldCancelCountdown) {

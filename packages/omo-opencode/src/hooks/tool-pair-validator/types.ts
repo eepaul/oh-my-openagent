@@ -15,13 +15,16 @@ export type ToolResultPart = {
   [key: string]: unknown
 }
 
-export type TextPart = {
+export type SyntheticTextPart = {
   type: "text"
   text: string
   synthetic: true
 }
 
-export type TransformPart = Part | ToolUsePart | ToolResultPart | TextPart
+// Wider than the SDK `Part` on purpose: the tool_pair_mismatch recovery strategy
+// injects synthetic tool_result/text parts into the transform stream, and those
+// shapes never originate from an OpenCode message.
+export type TransformPart = Part | ToolUsePart | ToolResultPart | SyntheticTextPart
 
 export type TransformMessageInfo = Message | {
   role: "user"
@@ -31,6 +34,11 @@ export type TransformMessageInfo = Message | {
 export interface MessageWithParts {
   info: TransformMessageInfo
   parts: TransformPart[]
+}
+
+export type UnpairedToolPart = {
+  readonly callID: string
+  readonly status: string
 }
 
 export type MessagesTransformHook = {

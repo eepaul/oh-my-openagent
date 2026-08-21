@@ -73,6 +73,10 @@ function createHelpers(deps: HookDeps, abortCalls: string[], clearCalls: string[
   }
 }
 
+afterEach(() => {
+  SessionCategoryRegistry.clear()
+})
+
 describe("createEventHandler", () => {
   afterEach(() => {
     SessionCategoryRegistry.clear()
@@ -177,7 +181,7 @@ describe("createEventHandler", () => {
     state.pendingFallbackModel = "openai/gpt-5.4"
     deps.sessionStates.set(sessionID, state)
     deps.sessionRetryInFlight.add(sessionID)
-    deps.sessionStatusRetryKeys.set(sessionID, "retry:1")
+    deps.sessionStatusRetryKeys.set(sessionID, new Set(["retry:1"]))
     const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
 
     // when
@@ -200,7 +204,7 @@ describe("createEventHandler", () => {
     deps.sessionStates.set(sessionID, state)
     deps.sessionRetryInFlight.add(sessionID)
     deps.sessionFallbackTimeouts.set(sessionID, 1)
-    deps.sessionStatusRetryKeys.set(sessionID, "retry:1")
+    deps.sessionStatusRetryKeys.set(sessionID, new Set(["retry:1"]))
     const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
 
     // when
@@ -227,7 +231,7 @@ describe("createEventHandler", () => {
     deps.sessionStates.set(sessionID, state)
     deps.sessionRetryInFlight.add(sessionID)
     deps.sessionAwaitingFallbackResult.add(sessionID)
-    deps.sessionStatusRetryKeys.set(sessionID, "retry:2")
+    deps.sessionStatusRetryKeys.set(sessionID, new Set(["retry:2"]))
     const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
 
     await handler({ event: { type: "session.error", properties: { sessionID, error: { name: "AbortError" } } } })
@@ -378,9 +382,287 @@ describe("createEventHandler", () => {
 
     // then - the stored model is the canonical string form, not the object
     const created = deps.sessionStates.get(sessionID)
-    expect(created?.originalModel).toBe("openai/gpt-5.5-codex")
-    expect(created?.currentModel).toBe("openai/gpt-5.5-codex")
+    expect(created?.originalModel).toBe("openai/gpt-5.5-codex(medium)")
+    expect(created?.currentModel).toBe("openai/gpt-5.5-codex(medium)")
     expect(typeof created?.currentModel).toBe("string")
+  })
+
+  it("#given session.created on an inherited-variant fallback #when the configured fallback is base-only #then the fallback index is retained", async () => {
+    // given
+    const sessionID = "session-inherited-variant-fallback-created"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      agents: {
+        sisyphus: {
+          model: "anthropic/claude-opus-4-7",
+          variant: "high",
+          fallback_models: ["openai/gpt-5.4", "google/gemini-2.5-pro"],
+        },
+      },
+    }
+    const abortCalls: string[] = []
+    const clearCalls: string[] = []
+    const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
+
+    // when
+    await handler({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: sessionID,
+            agent: "sisyphus",
+            model: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              variant: "high",
+            },
+          },
+        },
+      },
+    })
+
+    // then
+    const created = deps.sessionStates.get(sessionID)
+    expect(created?.originalModel).toBe("anthropic/claude-opus-4-7")
+    expect(created?.currentModel).toBe("openai/gpt-5.4(high)")
+    expect(created?.fallbackIndex).toBe(0)
+  })
+
+  it("#given session.created on a category-variant fallback #when the configured fallback is base-only #then the fallback index is retained", async () => {
+    // given
+    const sessionID = "session-category-variant-fallback-created"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      agents: {
+        sisyphus: {
+          model: "anthropic/claude-opus-4-7",
+          category: "deep",
+          fallback_models: ["openai/gpt-5.4", "google/gemini-2.5-pro"],
+        },
+      },
+      categories: {
+        deep: {
+          variant: "high",
+        },
+      },
+    }
+    const abortCalls: string[] = []
+    const clearCalls: string[] = []
+    const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
+
+    // when
+    await handler({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: sessionID,
+            agent: "sisyphus",
+            model: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              variant: "high",
+            },
+          },
+        },
+      },
+    })
+
+    // then
+    const created = deps.sessionStates.get(sessionID)
+    expect(created?.originalModel).toBe("anthropic/claude-opus-4-7")
+    expect(created?.currentModel).toBe("openai/gpt-5.4(high)")
+    expect(created?.fallbackIndex).toBe(0)
+  })
+
+  it("#given session.created on a registered-category fallback #when that category supplies the effective reasoning #then the active fallback is indexed with the category identity", async () => {
+    // given
+    const sessionID = "session-registered-category-fallback-created"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      agents: {
+        sisyphus: {
+          reasoning: "low",
+        },
+      },
+      categories: {
+        deep: {
+          model: "anthropic/claude-opus-4-7",
+          reasoning: "high",
+          fallback_models: ["openai/gpt-5.4", "google/gemini-2.5-pro"],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "deep")
+    const abortCalls: string[] = []
+    const clearCalls: string[] = []
+    const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
+
+    // when
+    await handler({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: sessionID,
+            agent: "sisyphus",
+            model: {
+              id: "gpt-5.4",
+              providerID: "openai",
+              variant: "high",
+            },
+          },
+        },
+      },
+    })
+
+    // then
+    const created = deps.sessionStates.get(sessionID)
+    expect(created?.originalModel).toBe("anthropic/claude-opus-4-7")
+    expect(created?.currentModel).toBe("openai/gpt-5.4(high)")
+    expect(created?.fallbackIndex).toBe(0)
+  })
+
+  it("#given session.created on a fallback whose inherited reasoning lowers to effort #when the event reports the base model #then the fallback index is retained", async () => {
+    // given
+    const sessionID = "session-category-reasoning-fallback-created"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      agents: {
+        sisyphus: {
+          model: "anthropic/claude-opus-4-7",
+          category: "deep",
+          fallback_models: ["test-provider/test-model", "google/gemini-2.5-pro"],
+        },
+      },
+      categories: {
+        deep: {
+          reasoning: "high",
+        },
+      },
+    }
+    const abortCalls: string[] = []
+    const clearCalls: string[] = []
+    const handler = createEventHandler(deps, createHelpers(deps, abortCalls, clearCalls))
+
+    // when
+    await handler({
+      event: {
+        type: "session.created",
+        properties: {
+          info: {
+            id: sessionID,
+            agent: "sisyphus",
+            model: {
+              id: "test-model",
+              providerID: "test-provider",
+            },
+          },
+        },
+      },
+    })
+
+    // then
+    const created = deps.sessionStates.get(sessionID)
+    expect(created?.originalModel).toBe("anthropic/claude-opus-4-7")
+    expect(created?.currentModel).toBe("test-provider/test-model")
+    expect(created?.fallbackIndex).toBe(0)
+  })
+})
+
+describe("createEventHandler fork regressions", () => {
+  afterEach(() => {
+    SessionCategoryRegistry.clear()
+    _resetForTesting()
+  })
+
+  it("#given a synchronous subagent session #when a retryable session.error fires #then runtime fallback does not dispatch a retry", async () => {
+    // given
+    const sessionID = "session-sync-task-error"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: ["openai/gpt-5.4"],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    syncTaskSessions.add(sessionID)
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.6-sol"))
+    const dispatchedModels: string[] = []
+    const helpers = createHelpers(deps, [], [])
+    helpers.autoRetryWithFallback = async (_sessionID: string, model: string) => {
+      dispatchedModels.push(model)
+      return { accepted: true, status: "dispatched" }
+    }
+    const handler = createEventHandler(deps, helpers)
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "openai",
+          modelID: "gpt-5.6-sol",
+          error: { name: "AI_APICallError", message: "Our servers are currently overloaded." },
+        },
+      },
+    })
+
+    // then
+    expect(dispatchedModels).toEqual([])
+  })
+
+  it("#given a non-task synchronous subagent session #when a retryable session.error fires #then runtime fallback remains available", async () => {
+    // given
+    const sessionID = "session-call-omo-error"
+    const deps = createDeps()
+    deps.pluginConfig = {
+      git_master: {
+        commit_footer: true,
+        include_co_authored_by: true,
+        git_env_prefix: "GIT_",
+      },
+      categories: {
+        test: {
+          fallback_models: ["openai/gpt-5.4"],
+        },
+      },
+    }
+    SessionCategoryRegistry.register(sessionID, "test")
+    syncSubagentSessions.add(sessionID)
+    deps.sessionStates.set(sessionID, createFallbackState("openai/gpt-5.6-sol"))
+    const dispatchedModels: string[] = []
+    const helpers = createHelpers(deps, [], [])
+    helpers.autoRetryWithFallback = async (_sessionID: string, model: string) => {
+      dispatchedModels.push(model)
+      return { accepted: true, status: "dispatched" }
+    }
+    const handler = createEventHandler(deps, helpers)
+
+    // when
+    await handler({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID,
+          providerID: "openai",
+          modelID: "gpt-5.6-sol",
+          error: { name: "AI_APICallError", message: "Our servers are currently overloaded." },
+        },
+      },
+    })
+
+    // then
+    expect(dispatchedModels).toEqual(["openai/gpt-5.4"])
   })
 
   it("#given pending fallback has a variant #when session.error reports the same model without variant #then fallback advances instead of being skipped", async () => {

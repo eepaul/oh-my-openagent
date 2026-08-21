@@ -13,7 +13,7 @@ function createNotification(client: {
     planPath: "/workspace/.omo/plans/plan.md",
     planName: "plan",
     blockedCount: 2,
-    preDispatchGuard: () => true,
+    shouldDispatch: () => true,
     settleMs: 0,
   }
 }

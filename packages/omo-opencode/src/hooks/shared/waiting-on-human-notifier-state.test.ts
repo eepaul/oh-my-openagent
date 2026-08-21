@@ -18,7 +18,7 @@ const notification = {
   planPath: "/workspace/.omo/plans/plan.md",
   planName: "plan",
   blockedCount: 2,
-  preDispatchGuard: () => true,
+  shouldDispatch: () => true,
   settleMs: 0,
 }
 
@@ -55,7 +55,7 @@ const reservationCases = [
   },
   {
     name: "guard rejected",
-    result: { status: "guard_rejected" },
+    result: { status: "cancelled" },
     keepsReservation: false,
   },
   {

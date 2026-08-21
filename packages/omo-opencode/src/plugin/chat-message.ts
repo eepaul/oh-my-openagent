@@ -5,7 +5,11 @@ import { detectSlashCommand, extractPromptText } from "../hooks/auto-slash-comma
 import { compactionGraceTracker, type CompactionGraceTracker } from "../hooks/shared/compaction-grace-tracker"
 import { captureHumanMessageResume, scheduleHumanMessageResume } from "../hooks/shared/human-resume-controller"
 import { isResumableHumanInput } from "../hooks/shared/resumable-human-input"
-import { isSyntheticOrInternalOnlyTextParts, log } from "../shared"
+import {
+  isRuntimeFallbackRetryTextParts,
+  isSyntheticOrInternalOnlyTextParts,
+  log,
+} from "../shared"
 import { applyUltraworkModelOverrideOnMessage } from "./ultrawork-model-override"
 import type { PluginContext } from "./types"
 import { handleGoalMessage } from "./chat-message/loop-commands"
@@ -135,6 +139,9 @@ export function createChatMessageHandler(args: {
   ): Promise<void> => {
     const nativeGoalCommand = consumeNativeGoalCommandMarker(output.parts)
     if (isSyntheticOrInternalOnlyTextParts(output.parts)) {
+      if (isRuntimeFallbackRetryTextParts(output.parts)) {
+        await hooks.runtimeFallback?.["chat.message"]?.(input, output)
+      }
       log("[chat-message] Skipping synthetic/internal-only message", {
         sessionID: input.sessionID,
       })

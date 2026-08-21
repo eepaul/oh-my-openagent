@@ -45,7 +45,7 @@ export async function notifyAtlasWaitingOnHuman(input: {
     planPath: input.planPath,
     planName: input.planName,
     blockedCount: getPlanChecklist(input.planPath).blocked ?? 0,
-    preDispatchGuard: () =>
+    shouldDispatch: () =>
       !input.options?.isContinuationStopped?.(input.sessionID)
       && (isFailClosed(input.ctx.directory, input.workId)
         || (() => {

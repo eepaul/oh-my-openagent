@@ -1,10 +1,10 @@
 # docs/ — User-Facing Documentation
 
-**Generated:** 2026-07-17 / 7d664b96b
+**Generated:** 2026-08-10 / 38d268995
 
 ## OVERVIEW
 
-~26 Markdown files across 6 subdirectories (guide, reference, examples, legal, templates, troubleshooting) + root files. Categorized by audience: user-facing guides + reference, troubleshooting, legal. The web site at [packages/web/](../packages/web) consumes some of these (via `web-deploy.yml` triggers).
+27 tracked Markdown files across 6 subdirectories (guide, reference, examples, legal, templates, troubleshooting) + root files. Categorized by audience: user-facing guides + reference, troubleshooting, legal. The web site at [packages/web/](../packages/web) consumes some of these (via `web-deploy.yml` triggers).
 
 ## WHERE TO LOOK
 
@@ -16,6 +16,7 @@
 | Picking the right model per agent | [docs/guide/agent-model-matching.md](guide/agent-model-matching.md) |
 | Team Mode (opt-in multi-agent) | [docs/guide/team-mode.md](guide/team-mode.md) |
 | Senpi task delegation and teams | [docs/guide/senpi-task.md](guide/senpi-task.md) |
+| Temporary BTW side conversations | [docs/guide/btw.md](guide/btw.md) |
 | Configuration field reference | [docs/reference/configuration.md](reference/configuration.md) |
 | Harness-neutral `omo.json` config reference | [docs/reference/omo-json.md](reference/omo-json.md) |
 | Feature-by-feature reference | [docs/reference/features.md](reference/features.md) |
@@ -34,6 +35,7 @@
 | Sample configs | [docs/examples/](examples) (default, coding-focused, planning-focused) |
 | Privacy & ToS | [docs/legal/](legal) |
 | Manifesto | [docs/manifesto.md](manifesto.md) |
+| Refreshing the model-capabilities cache | [docs/model-capabilities-maintenance.md](model-capabilities-maintenance.md) |
 | Ollama troubleshooting | [docs/troubleshooting/ollama.md](troubleshooting/ollama.md) |
 | Copyable project rules template | [docs/templates/AGENTS.md.example](templates/AGENTS.md.example) |
 

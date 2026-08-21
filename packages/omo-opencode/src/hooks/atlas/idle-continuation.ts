@@ -134,7 +134,7 @@ export async function injectContinuation(input: {
       backgroundManager: input.options?.backgroundManager,
       sessionState: input.sessionState,
       idleSettleMs: input.idleSettleMs,
-      preDispatchGuard: () => {
+      shouldDispatch: () => {
         const freshBoulder = readBoulderState(input.ctx.directory)
         const freshWorkId = freshBoulder?.active_work_id
           ?? getWorkForSession(input.ctx.directory, input.sessionID)?.work_id
