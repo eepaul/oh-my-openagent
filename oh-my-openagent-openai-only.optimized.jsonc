@@ -143,6 +143,11 @@
     }
   },
   "[opencode]": {
+    "tui": {
+      "sidebar": {
+        "enabled": false
+      }
+    },
     "runtime_fallback": {
       "enabled": true,
       "retry_on_errors": [
